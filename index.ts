@@ -35,21 +35,20 @@ declare global {
 
 // data
 
-const regionId = '000000000000'
 const port = 4000;
 const tickLength = 50;
 const users: user[] = [];
 var index = 0;
 const blockNames: internalDictionary = {
     '000000000000': 'air',
-    '000000000001': 'tile',
-    '000000000002': 'glass'
+    '5655135ebc9c': 'tile',
+    '2f9e4658c3f0': 'glass'
 };
 
-const region: region = {
+/* const region: region = {
     header: [],
     data: []
-};
+}; */
 
 const idToName = (id: string) => {
     return blockNames[id];
@@ -165,8 +164,8 @@ const generateEmptyRegion = () => {
     }
     // dummy data generation
     region.header.push('000000000000');
-    region.header.push('000000000001');
-    region.header.push('000000000002');
+    region.header.push('5655135ebc9c');
+    region.header.push('2f9e4658c3f0');
     SetBlock(100, 100, 100, 1, region);
     SetBlock(100, 100, 101, 2, region);
     SetBlock(101, 100, 100, 1, region);
@@ -205,6 +204,8 @@ const SetBlock = (x: number, y: number, z: number, blockIndex: number, region: r
     region.data[regionX][regionY][regionZ][chunkX][chunkY][chunkZ] = blockIndex;
     return region;
 }
+
+const region = generateEmptyRegion();
 
 //s3Query(`regions/${regionId}.mvr`).then((data: any) => {
     //if(!data) return;
@@ -285,6 +286,7 @@ server.on('message', (msg, rinfo) => {
         });
     }
     else if(packet.type === 'region'){
+        console.log(`> [SERVER] region request received`);
         server.send(`confirmregion\t${compressRegion(region).toString('base64')}`, rinfo.port, rinfo.address);
     }
 });
