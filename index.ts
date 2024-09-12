@@ -1,8 +1,7 @@
 // imports
 
-import dgram from 'node:dgram';
-import readline from 'node:readline';
-import fs from 'fs';
+import dgram from 'dgram';
+import readline from 'readline';
 import zlib from 'zlib';
 
 // data types
@@ -28,122 +27,68 @@ declare global {
         header: string[],
         data: number[][][][][][]
     }
-    interface internalDictionary {
-        [key: string]: string
-    }
 }
 
-// data
+// logging
 
-const port = 4000;
-const tickLength = 50;
-const users: user[] = [];
-var index = 0;
-const blockNames: internalDictionary = {
-    '000000000000': 'air',
-    '5655135ebc9c': 'tile',
-    '2f9e4658c3f0': 'glass'
-};
+const log = (message: string) => {
+    console.log(`> [SERVER] ${message}`);
+}
 
-/* const region: region = {
-    header: [],
-    data: []
-}; */
+const error = (message: string) => {
+    console.error(`> [SERVER] ${message}`);
+}
 
-const idToName = (id: string) => {
-    return blockNames[id];
-};
+// region
 
-const s3Query = (path: string) => {
-    const root = '../daimon_vault/bucket/';
-    return new Promise((resolve) => {
-        fs.readFile(root+path, (err, data) => {
-            if (err) {
-                console.log(err);
-                resolve(null);
-            } else {
-                resolve(data);
-            }
-        }
-    )});
-};
-
-const s3Create = (path: string, body: any) => {
-    const root = '../daimon_vault/bucket/';
-    return new Promise<boolean>((resolve) => {
-        fs.writeFile(root+path, body, (err) => {
-            if (err) {
-                console.log(err);
-                resolve(false);
-            } else {
-                resolve(true);
-            }
-        })
-    });
-};
-
-const compressRegion = (region: region) => {
+const regionObjectToBuffer = (object: region) => {
     const headerBuffer = Buffer.alloc(256 * 6);
     for (let i = 0; i < 256; i++) {
-        if (region.header[i] === undefined) headerBuffer.write('000000000000', i * 6, 6, 'hex');
-        else headerBuffer.write(region.header[i], i * 6, 6, 'hex');
+        if (object.header[i] === undefined) headerBuffer.write(`000000000000`, i * 6, 6, `hex`);
+        else headerBuffer.write(object.header[i], i * 6, 6, `hex`);
     }
-    const contentBuffer = Buffer.alloc(16 * 16 * 16 * 16 * 16 * 16);
+    const dataBuffer = Buffer.alloc(16 * 16 * 16 * 16 * 16 * 16);
     for (let i = 0; i < 16; i++) {
         for (let j = 0; j < 16; j++) {
             for (let k = 0; k < 16; k++) {
                 for (let l = 0; l < 16; l++) {
                     for (let m = 0; m < 16; m++) {
                         for (let n = 0; n < 16; n++) {
-                            contentBuffer.writeUInt8(region.data[i][j][k][l][m][n], i * 16 * 16 * 16 * 16 * 16 + j * 16 * 16 * 16 * 16 + k * 16 * 16 * 16 + l * 16 * 16 + m * 16 + n);
+                            dataBuffer.writeUInt8(object.data[i][j][k][l][m][n], i * 16 * 16 * 16 * 16 * 16 + j * 16 * 16 * 16 * 16 + k * 16 * 16 * 16 + l * 16 * 16 + m * 16 + n);
                         }
                     }
                 }
             }
         }
     }
-    const buffer = Buffer.concat([headerBuffer, contentBuffer]);
-    const compressedBuffer = zlib.deflateSync(buffer);
-    console.log(`> [SERVER] region compressed to ${compressedBuffer.length} bytes`);
-    return compressedBuffer;
+
+    const buffer = zlib.deflateSync(Buffer.concat([headerBuffer, dataBuffer]));
+    log(`region compressed to ${buffer.length} bytes`);
+    return buffer;
 };
 
-const decompressRegion = (region: region, data: Buffer) => {
-    const buffer = zlib.inflateSync(data);
-    const headerBuffer = buffer.slice(0, 256 * 6);
-    const contentBuffer = buffer.slice(256 * 6);
-    for (let i = 0; i < 256; i++) {
-        region.header.push(headerBuffer.toString('hex', i * 6, i * 6 + 6));
-    }
-    for (let i = 0; i < 16; i++) {
-        region.data.push([]); //region x
-        for (let j = 0; j < 16; j++) {
-            region.data[i].push([]); //region y
-            for (let k = 0; k < 16; k++) {
-                region.data[i][j].push([]); //region z
-                for (let l = 0; l < 16; l++) {
-                    region.data[i][j][k].push([]); //chunk x
-                    for (let m = 0; m < 16; m++) {
-                        region.data[i][j][k][l].push([]); //chunk y
-                        for (let n = 0; n < 16; n++) {
-                            region.data[i][j][k][l][m].push(contentBuffer.readUInt8(i * 16 * 16 * 16 * 16 * 16 + j * 16 * 16 * 16 * 16 + k * 16 * 16 * 16 + l * 16 * 16 + m * 16 + n));
-                        }
-                    }
-                }
-            }
-        }
-    }
-    console.log(`> [SERVER] region decompressed from ${data.length} bytes`);
-    return region;
-};
+const SetBlock = (x: number, y: number, z: number, blockIndex: number, region: region) => {
+    const regionX = Math.floor(x / 16);
+    const regionY = Math.floor(y / 16);
+    const regionZ = Math.floor(z / 16);
+    const chunkX = x % 16;
+    const chunkY = y % 16;
+    const chunkZ = z % 16;
+    region.data[regionX][regionY][regionZ][chunkX][chunkY][chunkZ] = blockIndex;
+}
 
-
-const generateEmptyRegion = () => {
+const generateSampleRegion = () => {
     const region: region = {
         header: [],
         data: []
     };
 
+    // set sample header
+    region.header.push(`000000000000`); // air
+    region.header.push(`5655135ebc9c`); // tile
+    region.header.push(`2f9e4658c3f0`); // glass
+
+    // fill data with air
     for (let i = 0; i < 16; i++) {
         region.data.push([]); //region x
         for (let j = 0; j < 16; j++) {
@@ -162,10 +107,8 @@ const generateEmptyRegion = () => {
             }
         }
     }
-    // dummy data generation
-    region.header.push('000000000000');
-    region.header.push('5655135ebc9c');
-    region.header.push('2f9e4658c3f0');
+
+    // set sample blocks
     SetBlock(100, 100, 100, 1, region);
     SetBlock(100, 100, 101, 2, region);
     SetBlock(101, 100, 100, 1, region);
@@ -178,71 +121,49 @@ const generateEmptyRegion = () => {
     return region;
 };
 
-const listNonAirBlocks = (region: region) => {
-    for (let i = 0; i < 16; i++) {
-        for (let j = 0; j < 16; j++) {
-            for (let k = 0; k < 16; k++) {
-                for (let l = 0; l < 16; l++) {
-                    for (let m = 0; m < 16; m++) {
-                        for (let n = 0; n < 16; n++) {
-                            if(region.data[i][j][k][l][m][n] !== 0) console.log(`> [SERVER] the block at coordinates x:${i*16+l} y:${j*16+m} z:${k*16+n} is ${idToName(region.header[region.data[i][j][k][l][m][n]])}`);
-                        }
-                    }
-                }
-            }
-        }
-    }
-};
-
-const SetBlock = (x: number, y: number, z: number, blockIndex: number, region: region) => {
-    const regionX = Math.floor(x / 16);
-    const regionY = Math.floor(y / 16);
-    const regionZ = Math.floor(z / 16);
-    const chunkX = x % 16;
-    const chunkY = y % 16;
-    const chunkZ = z % 16;
-    region.data[regionX][regionY][regionZ][chunkX][chunkY][chunkZ] = blockIndex;
-    return region;
-}
-
-const region = generateEmptyRegion();
-
-//s3Query(`regions/${regionId}.mvr`).then((data: any) => {
-    //if(!data) return;
-    //decompressRegion(region, data);
-    console.log('> [SERVER] region loaded');
-//});
-
-/* s3Create(`regions/${regionId}.mvr`, compressRegion(generateEmptyRegion())).then((success: boolean) => {
-    if(success) console.log('> [SERVER] region created');
-    else console.log('> [SERVER] region creation failed');
-}); */
+const region = generateSampleRegion();
 
 // udp server
 
-const server = dgram.createSocket('udp4');
+const port = 4000;
+const connectedUsers: user[] = [];
+const server = dgram.createSocket(`udp4`);
+
+const packetBufferToObject = (buffer: Buffer) => {
+    const elements: string[] = buffer.toString().split(`\t`);
+    const type = elements.shift();
+    const index = parseInt(elements.shift() || `-1`);
+    const packet: packet = {
+        type: type || ``,
+        index: index,
+        data: elements
+    };
+    return packet;
+};
 
 server.bind(port);
 
-server.on('error', (err) => {
-    console.log(err.stack);
+server.on(`error`, (err) => {
+    error(`server error: ${err}`);
     server.close();
 });
 
-server.on('message', (msg, rinfo) => {
-    const packet: packet = parsePacket(msg);
-    // need to implement permission check
-    if(packet.type === 'connect'){
-        console.log(`> [SERVER] ${packet.data[0]} attempting to connect...`);
-        if(users.find(user => user.username === packet.data[0])){
-            console.log(`> [SERVER] user already connected!`);
-            server.send('conflict', rinfo.port, rinfo.address);
+server.on(`message`, (buffer, rinfo) => {
+    const packet: packet = packetBufferToObject(buffer);
+    // user connects
+    if(packet.type === `connect`){
+        log(`${packet.data[0]} attempting to connect...`);
+        const isAlreadyConnected = connectedUsers.find(user => user.username === packet.data[0]);
+        if(isAlreadyConnected){
+            log(`user already connected!`);
+            // server sends conflict error
+            server.send(`conflict`, rinfo.port, rinfo.address);
         }
         else
         {
-            console.log(`> [SERVER] connected!`);
+            log(`connected!`);
             const user: user = {
-                index: users.length,
+                index: connectedUsers.length,
                 address: rinfo.address,
                 port: rinfo.port,
                 username: packet.data[0],
@@ -252,82 +173,110 @@ server.on('message', (msg, rinfo) => {
                     z: 0
                 }
             };
-            index++;
-            users.push(user);
-            server.send(`confirmconnect\t${user.index}\t${users.map(user => `${user.index}\t${user.username}`).join('\t')}`, rinfo.port, rinfo.address);
-            users.forEach(otherUser => {
+            connectedUsers.push(user);
+            // server confirms connection
+            server.send(`confirmconnect\t${user.index}\t${connectedUsers.map(user => `${user.index}\t${user.username}`).join(`\t`)}`, rinfo.port, rinfo.address);
+            connectedUsers.forEach(otherUser => {
+                // server sends connected user signal to all connected users
                 server.send(`userconnected\t${user.index}\t${user.username}`, otherUser.port, otherUser.address);
+                // server sends chat message to all connected users
                 server.send(`chatmessage\t${user.index}\t${user.username}\t${user.username} has connected`, otherUser.port, otherUser.address);
             });
         }
     }
-    else if(packet.type === 'disconnect'){
-        const user = users.find(user => user.index === packet.index);
+    // user disconnects
+    else if(packet.type === `disconnect`){
+        const user = connectedUsers.find(user => user.index === packet.index);
         if(!user) return;
-        console.log(`> [SERVER] ${user.username} has disconnected`);
-        users.splice(users.indexOf(user), 1);
-        users.forEach(otherUser => {
+        log(`${user.username} has disconnected`);
+        connectedUsers.splice(connectedUsers.indexOf(user), 1);
+        connectedUsers.forEach(otherUser => {
+            // server sends disconnected user signal to all connected users
             server.send(`userdisconnected\t${user.index}`, otherUser.port, otherUser.address);
+            // server sends chat message to all connected users
             server.send(`chatmessage\t${user.index}\t${user.username}\t${user.username} has disconnected`, otherUser.port, otherUser.address);
         });
     }
-    else if(packet.type === 'position'){
-        const user = users.find(user => user.index === packet.index);
+    // user sends their position
+    else if(packet.type === `position`){
+        const user = connectedUsers.find(user => user.index === packet.index);
         if(!user) return;
-        user.position.x = parseFloat(packet.data[0].replace(/,/g, '.'));
-        user.position.y = parseFloat(packet.data[1].replace(/,/g, '.'));
-        user.position.z = parseFloat(packet.data[2].replace(/,/g, '.'));
+        user.position.x = parseFloat(packet.data[0].replace(/,/g, `.`));
+        user.position.y = parseFloat(packet.data[1].replace(/,/g, `.`));
+        user.position.z = parseFloat(packet.data[2].replace(/,/g, `.`));
     }
-    else if(packet.type === 'chat'){
-        const user = users.find(user => user.index === packet.index);
+    // user sends a chat message
+    else if(packet.type === `chat`){
+        const user = connectedUsers.find(user => user.index === packet.index);
         if(!user) return;
-        users.forEach(otherUser => {
+        connectedUsers.forEach(otherUser => {
+            // server sends chat message to all connected users
             server.send(`chatmessage\t${user.index}\t${user.username}\t${packet.data[0]}`, otherUser.port, otherUser.address);
         });
     }
-    else if(packet.type === 'region'){
-        console.log(`> [SERVER] region request received`);
-        server.send(`confirmregion\t${compressRegion(region).toString('base64')}`, rinfo.port, rinfo.address);
+    // user requests a region
+    else if(packet.type === `region`){
+        log(`region request received`);
+        // server sends region to user
+        server.send(`confirmregion\t${regionObjectToBuffer(region).toString(`base64`)}`, rinfo.port, rinfo.address);
     }
 });
 
-server.on('listening', () =>{
-    console.log('[SERVER] server startup successful');
+server.on(`listening`, () =>{
+    log(`server startup successful`);
 });
 
-const parsePacket = (msg: Buffer) => {
-    // need to implement invalid packet check
-    const elements: string[] = msg.toString().split('\t');
-    const type = elements.shift();
-    const index = parseInt(elements.shift() || '-1');
-    const packet: packet = {
-        type: type || '',
-        index: index,
-        data: elements
-    };
-    return packet;
-};
-
 // loop
+
+const tickLength = 50; // ms
+
+const loop = () => {
+    connectedUsers.forEach(user => {
+        // server sends all positions to all connected users
+        server.send(`allpositions\t${connectedUsers.map(user => `${user.index}\t${user.position.x}\t${user.position.y}\t${user.position.z}`.replace(/\./g, `,`)).join(`\t`)}`, user.port, user.address);
+    });
+};
 
 setInterval(() => {
     loop();
 }, tickLength);
 
-const loop = () => {
-    users.forEach(user => {
-        server.send(`allpositions\t${users.map(user => `${user.index}\t${user.position.x}\t${user.position.y}\t${user.position.z}`.replace(/\./g, ',')).join('\t')}`, user.port, user.address);
-    });
-};
+// command line interface
 
 const forceDisconnect = (index: number) => {
-    const user = users.find(user => user.index === index);
+    const user = connectedUsers.find(user => user.index === index);
     if(!user) return;
+    // server sends forced disconnect signal to user
     server.send(`forcedisconnect`, user.port, user.address);
-    users.splice(users.indexOf(user), 1);
+    connectedUsers.splice(connectedUsers.indexOf(user), 1);
 };
 
-// command line interface
+const printNonAirBlocks = (region: region) => {
+    interface internalDictionary {
+        [key: string]: string
+    }
+    const blockNames: internalDictionary = {
+        '000000000000': 'air',
+        '5655135ebc9c': 'tile',
+        '2f9e4658c3f0': 'glass'
+    };
+    const idToName = (id: string) => {
+        return blockNames[id];
+    };
+    for (let i = 0; i < 16; i++) {
+        for (let j = 0; j < 16; j++) {
+            for (let k = 0; k < 16; k++) {
+                for (let l = 0; l < 16; l++) {
+                    for (let m = 0; m < 16; m++) {
+                        for (let n = 0; n < 16; n++) {
+                            if(region.data[i][j][k][l][m][n] !== 0) log(`the block at coordinates x:${i*16+l} y:${j*16+m} z:${k*16+n} is ${idToName(region.header[region.data[i][j][k][l][m][n]])}`);
+                        }
+                    }
+                }
+            }
+        }
+    }
+};
 
 const rl = readline.createInterface({
     input: process.stdin,
@@ -335,58 +284,49 @@ const rl = readline.createInterface({
     terminal: false
 });
 
-rl.on('line', (input) => {
-    const args = input.split(' ');
-    if(args[0] === 'list'){
-        console.log('> [SERVER] users:');
-        console.log(users);
+rl.on(`line`, (input) => {
+    const args = input.split(` `);
+    if(args[0] === `list`){
+        log(`users:`);
+        console.log(connectedUsers);
     }
-    else if(args[0] === 'kickall'){
-        users.splice(0, users.length);
-        console.log('> [SERVER] all users kicked');
+    else if(args[0] === `kickall`){
+        connectedUsers.forEach(user => {
+            forceDisconnect(user.index);
+        });
+        log(`all users kicked`);
     }
-    else if(args[0] === 'kick'){
-        const user = users.find(user => user.index === parseInt(args[1]));
+    else if(args[0] === `kick`){
+        const user = connectedUsers.find(user => user.index === parseInt(args[1]));
         if(!user) return;
         forceDisconnect(user.index);
-        console.log(`> [SERVER] ${user.username} kicked`);
+        log(`${user.username} kicked`);
     }
-    else if(args[0] === 'exit'){
+    else if(args[0] === `exit`){
         rl.close();
     }
-    else if(args[0] === 'region'){
-        console.log('> [SERVER] info about region:');
+    else if(args[0] === `region`){
+        log(`info about region:`);
         console.log(region);
     }
-    else if(args[0] === 'nonair'){
-        console.log('> [SERVER] non air blocks:');
-        listNonAirBlocks(region);
+    else if(args[0] === `nonair`){
+        log(`non air blocks:`);
+        printNonAirBlocks(region);
+    }
+    else if(args[0] === `clear`){
+        console.clear();
+    }
+    else if(args[0] === `exit`){
+        rl.close();
     }
     else{
-        console.log('> [SERVER] command not found');
+        log(`command not found`);
     }
 });
 
-rl.on('close', () => {
-    console.log('> [SERVER] server shutdown successful');
+rl.on(`close`, () => {
+    log(`server shutdown successful`);
     process.exit(0);
 });
 
 rl.prompt();
-
-// current client packet types:
-
-// - connect username
-// - disconnect index
-// - position index x y z
-// - chat index username message
-// - region
-
-// current server packet types:
-
-// - confirmconnect index [index username]
-// - conflict
-// - userconnected index username
-// - userdisconnected index
-// - allpositions [index x y z]
-// - confirmregion region(base64)
