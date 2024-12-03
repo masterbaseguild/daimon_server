@@ -152,7 +152,7 @@ server.on(`message`, (buffer, rinfo) => {
     const packet: packet = packetBufferToObject(buffer);
     // user connects
     if(packet.type === `connect`){
-        log(`${packet.data[0]} attempting to connect...`);
+        log(`${packet.data[0]} attempting to connect with client port ${rinfo.port}...`);
         const isAlreadyConnected = connectedUsers.find(user => user.username === packet.data[0]);
         if(isAlreadyConnected){
             log(`user already connected!`);
