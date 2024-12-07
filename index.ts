@@ -3,6 +3,7 @@
 import dgram from 'dgram';
 import readline from 'readline';
 import zlib from 'zlib';
+import fs from 'fs';
 
 // data types
 
@@ -121,7 +122,9 @@ const generateSampleRegion = () => {
     return region;
 };
 
-const region = generateSampleRegion();
+//const region = generateSampleRegion();
+//fs.writeFileSync(`region.json`, JSON.stringify(region));
+const region = JSON.parse(fs.readFileSync(`region.json`, `utf8`));
 
 // udp server
 
