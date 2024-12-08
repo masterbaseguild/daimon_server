@@ -281,6 +281,24 @@ const printNonAirBlocks = (region: region) => {
     }
 };
 
+const printNonEmptyChunks = (region: region) => {
+    for (let i = 0; i < 16; i++) {
+        for (let j = 0; j < 16; j++) {
+            for (let k = 0; k < 16; k++) {
+                let isEmpty = true;
+                for (let l = 0; l < 16; l++) {
+                    for (let m = 0; m < 16; m++) {
+                        for (let n = 0; n < 16; n++) {
+                            if(region.data[i][j][k][l][m][n] !== 0) isEmpty = false;
+                        }
+                    }
+                }
+                if(!isEmpty) log(`chunk at coordinates x:${i} y:${j} z:${k} is not empty`);
+            }
+        }
+    }
+}
+
 const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
@@ -315,6 +333,10 @@ rl.on(`line`, (input) => {
     else if(args[0] === `nonair`){
         log(`non air blocks:`);
         printNonAirBlocks(region);
+    }
+    else if(args[0] === `nonempty`){
+        log(`non empty chunks:`);
+        printNonEmptyChunks(region);
     }
     else if(args[0] === `clear`){
         console.clear();
