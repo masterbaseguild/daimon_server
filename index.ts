@@ -17,6 +17,16 @@ declare global {
             x: number,
             y: number,
             z: number
+        },
+        rotation: {
+            x: number,
+            y: number,
+            z: number
+        },
+        camera: {
+            x: number,
+            y: number,
+            z: number
         }
     }
     interface packet {
@@ -174,6 +184,16 @@ server.on(`message`, (buffer, rinfo) => {
                     x: 0,
                     y: 0,
                     z: 0
+                },
+                rotation: {
+                    x: 0,
+                    y: 0,
+                    z: 0
+                },
+                camera: {
+                    x: 0,
+                    y: 0,
+                    z: 0
                 }
             };
             connectedUsers.push(user);
@@ -207,6 +227,10 @@ server.on(`message`, (buffer, rinfo) => {
         user.position.x = parseFloat(packet.data[0].replace(/,/g, `.`));
         user.position.y = parseFloat(packet.data[1].replace(/,/g, `.`));
         user.position.z = parseFloat(packet.data[2].replace(/,/g, `.`));
+        user.rotation.x = parseFloat(packet.data[3].replace(/,/g, `.`));
+        user.rotation.y = parseFloat(packet.data[4].replace(/,/g, `.`));
+        user.rotation.z = parseFloat(packet.data[5].replace(/,/g, `.`));
+        user.camera.x = parseFloat(packet.data[6].replace(/,/g, `.`));
     }
     // user sends a chat message
     else if(packet.type === `chat`){
@@ -236,7 +260,7 @@ const tickLength = 50; // ms
 const loop = () => {
     connectedUsers.forEach(user => {
         // server sends all positions to all connected users
-        server.send(`allpositions\t${connectedUsers.map(user => `${user.index}\t${user.position.x}\t${user.position.y}\t${user.position.z}`.replace(/\./g, `,`)).join(`\t`)}`, user.port, user.address);
+        server.send(`allpositions\t${connectedUsers.map(user => `${user.index}\t${user.position.x}\t${user.position.y}\t${user.position.z}\t${user.rotation.x}\t${user.rotation.y}\t${user.rotation.z}\t${user.camera.x}`.replace(/\./g, `,`)).join(`\t`)}`, user.port, user.address);
     });
 };
 
@@ -299,7 +323,7 @@ const printNonEmptyChunks = (region: region) => {
     }
 }
 
-if(process.stdin.isTTY){
+if(true){
     const rl = readline.createInterface({
         input: process.stdin,
         output: process.stdout,
