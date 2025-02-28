@@ -299,59 +299,61 @@ const printNonEmptyChunks = (region: region) => {
     }
 }
 
-const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-    terminal: false
-});
+if(process.stdin.isTTY){
+    const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+        terminal: false
+    });
 
-rl.on(`line`, (input) => {
-    const args = input.split(` `);
-    if(args[0] === `list`){
-        log(`users:`);
-        console.log(connectedUsers);
-    }
-    else if(args[0] === `kickall`){
-        connectedUsers.forEach(user => {
+    rl.on(`line`, (input) => {
+        const args = input.split(` `);
+        if(args[0] === `list`){
+            log(`users:`);
+            console.log(connectedUsers);
+        }
+        else if(args[0] === `kickall`){
+            connectedUsers.forEach(user => {
+                forceDisconnect(user.index);
+            });
+            log(`all users kicked`);
+        }
+        else if(args[0] === `kick`){
+            const user = connectedUsers.find(user => user.index === parseInt(args[1]));
+            if(!user) return;
             forceDisconnect(user.index);
-        });
-        log(`all users kicked`);
-    }
-    else if(args[0] === `kick`){
-        const user = connectedUsers.find(user => user.index === parseInt(args[1]));
-        if(!user) return;
-        forceDisconnect(user.index);
-        log(`${user.username} kicked`);
-    }
-    else if(args[0] === `exit`){
-        rl.close();
-    }
-    else if(args[0] === `region`){
-        log(`info about region:`);
-        console.log(region);
-    }
-    else if(args[0] === `nonair`){
-        log(`non air blocks:`);
-        printNonAirBlocks(region);
-    }
-    else if(args[0] === `nonempty`){
-        log(`non empty chunks:`);
-        printNonEmptyChunks(region);
-    }
-    else if(args[0] === `clear`){
-        console.clear();
-    }
-    else if(args[0] === `exit`){
-        rl.close();
-    }
-    else{
-        log(`command not found`);
-    }
-});
+            log(`${user.username} kicked`);
+        }
+        else if(args[0] === `exit`){
+            rl.close();
+        }
+        else if(args[0] === `region`){
+            log(`info about region:`);
+            console.log(region);
+        }
+        else if(args[0] === `nonair`){
+            log(`non air blocks:`);
+            printNonAirBlocks(region);
+        }
+        else if(args[0] === `nonempty`){
+            log(`non empty chunks:`);
+            printNonEmptyChunks(region);
+        }
+        else if(args[0] === `clear`){
+            console.clear();
+        }
+        else if(args[0] === `exit`){
+            rl.close();
+        }
+        else{
+            log(`command not found`);
+        }
+    });
 
-rl.on(`close`, () => {
-    log(`server shutdown successful`);
-    process.exit(0);
-});
+    rl.on(`close`, () => {
+        log(`server shutdown successful`);
+        process.exit(0);
+    });
 
-rl.prompt();
+    rl.prompt();
+}
