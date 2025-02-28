@@ -128,7 +128,7 @@ const region = JSON.parse(fs.readFileSync(`region.json`, `utf8`));
 
 // udp server
 
-const port = 4000;
+const port = 7689;
 const connectedUsers: user[] = [];
 const server = dgram.createSocket(`udp4`);
 

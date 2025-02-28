@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  arena:
+    image: arena:latest
+    ports:
+      - "7689:7689"
+    container_name: arena_service
+    networks:
+      - arena
+    restart: always
+
+networks:
+  arena:
+    driver: bridge
