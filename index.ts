@@ -323,7 +323,7 @@ const printNonEmptyChunks = (region: region) => {
     }
 }
 
-if(true){
+if(false){
     const rl = readline.createInterface({
         input: process.stdin,
         output: process.stdout,
