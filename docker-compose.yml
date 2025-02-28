@@ -5,6 +5,7 @@ services:
     image: arena:latest
     ports:
       - "7689:7689"
+      - "7688:7689/udp"
     container_name: arena_service
     networks:
       - arena
