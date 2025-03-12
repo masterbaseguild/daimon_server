@@ -73,7 +73,15 @@ const regionObjectToBuffer = (object: region) => {
         }
     }
 
-    const buffer = zlib.deflateSync(Buffer.concat([headerBuffer, dataBuffer]));
+    const headerUint8Array = new Uint8Array(headerBuffer.buffer);
+    const dataUint8Array = new Uint8Array(dataBuffer.buffer);
+
+    const combinedArray = new Uint8Array(headerUint8Array.length + dataUint8Array.length);
+    combinedArray.set(headerUint8Array);
+    combinedArray.set(dataUint8Array, headerUint8Array.length);
+
+    const buffer = zlib.deflateSync(combinedArray);
+
     log(`region compressed to ${buffer.length} bytes`);
     return buffer;
 };
