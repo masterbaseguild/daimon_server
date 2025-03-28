@@ -30,13 +30,36 @@ declare global {
         }
     }
     interface packet {
-        type: string,
+        type: number,
         index: number,
         data: any
     }
     interface region {
         header: string[],
         data: number[][][][][][]
+    }
+}
+
+const Packet = {
+    client:
+    {
+        CONNECT: 0,
+        DISCONNECT: 1,
+        WORLD: 2,
+        NEWPOSITION: 3,
+        KEEPALIVE: 4,
+        CHAT: 5,
+        USERCONNECT: 6,
+        USERDISCONNECT: 7
+    },
+    server:
+    {
+        CONNECT: 0,
+        DISCONNECT: 1,
+        WORLD: 2,
+        NEWPOSITION: 3,
+        KEEPALIVE: 4,
+        CHAT: 5
     }
 }
 
@@ -208,10 +231,10 @@ const server = dgram.createSocket(`udp4`);
 
 const packetBufferToObject = (buffer: Buffer) => {
     const elements: string[] = buffer.toString().split(`\t`);
-    const type = elements.shift();
+    const type = parseInt(elements.shift() || `-1`);
     const index = parseInt(elements.shift() || `-1`);
     const packet: packet = {
-        type: type || ``,
+        type: type,
         index: index,
         data: elements
     };
@@ -239,13 +262,13 @@ server.on(`error`, (err) => {
 server.on(`message`, (buffer, rinfo) => {
     const packet: packet = packetBufferToObject(buffer);
     // user connects
-    if(packet.type === `connect`){
+    if(packet.type === Packet.server.CONNECT){
         log(`${packet.data[0]} attempting to connect with client port ${rinfo.port}...`);
         const isAlreadyConnected = connectedUsers.find(user => user.username === packet.data[0]);
         if(isAlreadyConnected){
             log(`user already connected!`);
             // server sends conflict error
-            server.send(`conflict`, rinfo.port, rinfo.address);
+            server.send(`${Packet.client.DISCONNECT}`, rinfo.port, rinfo.address);
         }
         else
         {
@@ -273,30 +296,30 @@ server.on(`message`, (buffer, rinfo) => {
             };
             connectedUsers.push(user);
             // server confirms connection
-            server.send(`confirmconnect\t${user.index}\t${connectedUsers.map(user => `${user.index}\t${user.username}`).join(`\t`)}`, rinfo.port, rinfo.address);
+            server.send(`${Packet.client.CONNECT}\t${user.index}\t${connectedUsers.map(user => `${user.index}\t${user.username}`).join(`\t`)}`, rinfo.port, rinfo.address);
             connectedUsers.forEach(otherUser => {
                 // server sends connected user signal to all connected users
-                server.send(`userconnected\t${user.index}\t${user.username}`, otherUser.port, otherUser.address);
+                server.send(`${Packet.client.USERCONNECT}\t${user.index}\t${user.username}`, otherUser.port, otherUser.address);
                 // server sends chat message to all connected users
-                server.send(`chatmessage\t${user.index}\t${user.username}\t${user.username} has connected`, otherUser.port, otherUser.address);
+                server.send(`${Packet.client.CHAT}\t${user.index}\t${user.username}\t${user.username} has connected`, otherUser.port, otherUser.address);
             });
         }
     }
     // user disconnects
-    else if(packet.type === `disconnect`){
+    else if(packet.type === Packet.server.DISCONNECT){
         const user = connectedUsers.find(user => user.index === packet.index);
         if(!user) return;
         log(`${user.username} has disconnected`);
         connectedUsers.splice(connectedUsers.indexOf(user), 1);
         connectedUsers.forEach(otherUser => {
             // server sends disconnected user signal to all connected users
-            server.send(`userdisconnected\t${user.index}`, otherUser.port, otherUser.address);
+            server.send(`${Packet.client.USERDISCONNECT}\t${user.index}`, otherUser.port, otherUser.address);
             // server sends chat message to all connected users
-            server.send(`chatmessage\t${user.index}\t${user.username}\t${user.username} has disconnected`, otherUser.port, otherUser.address);
+            server.send(`${Packet.client.CHAT}\t${user.index}\t${user.username}\t${user.username} has disconnected`, otherUser.port, otherUser.address);
         });
     }
     // user sends their position
-    else if(packet.type === `position`){
+    else if(packet.type === Packet.server.NEWPOSITION){
         const user = connectedUsers.find(user => user.index === packet.index);
         if(!user) return;
         user.position.x = parseFloat(packet.data[0].replace(/,/g, `.`));
@@ -308,19 +331,19 @@ server.on(`message`, (buffer, rinfo) => {
         user.camera.x = parseFloat(packet.data[6].replace(/,/g, `.`));
     }
     // user sends a chat message
-    else if(packet.type === `chat`){
+    else if(packet.type === Packet.server.CHAT){
         const user = connectedUsers.find(user => user.index === packet.index);
         if(!user) return;
         connectedUsers.forEach(otherUser => {
             // server sends chat message to all connected users
-            server.send(`chatmessage\t${user.index}\t${user.username}\t${packet.data[0]}`, otherUser.port, otherUser.address);
+            server.send(`${Packet.client.CHAT}\t${user.index}\t${user.username}\t${packet.data[0]}`, otherUser.port, otherUser.address);
         });
     }
     // user requests a region
-    else if(packet.type === `region`){
+    else if(packet.type === Packet.server.WORLD){
         log(`region request received`);
         // server sends region to user
-        server.send(`confirmregion\t${regionObjectToBuffer(region).toString(`base64`)}`, rinfo.port, rinfo.address);
+        server.send(`${Packet.client.WORLD}\t${regionObjectToBuffer(region).toString(`base64`)}`, rinfo.port, rinfo.address);
     }
 });
 
@@ -335,7 +358,7 @@ const tickLength = 20; // ms
 const loop = () => {
     connectedUsers.forEach(user => {
         // server sends all positions to all connected users
-        server.send(`allpositions\t${connectedUsers.map(user => `${user.index}\t${user.position.x}\t${user.position.y}\t${user.position.z}\t${user.rotation.x}\t${user.rotation.y}\t${user.rotation.z}\t${user.camera.x}`.replace(/\./g, `,`)).join(`\t`)}`, user.port, user.address);
+        server.send(`${Packet.client.NEWPOSITION}\t${connectedUsers.map(user => `${user.index}\t${user.position.x}\t${user.position.y}\t${user.position.z}\t${user.rotation.x}\t${user.rotation.y}\t${user.rotation.z}\t${user.camera.x}`.replace(/\./g, `,`)).join(`\t`)}`, user.port, user.address);
     });
 };
 
@@ -349,7 +372,7 @@ const forceDisconnect = (index: number) => {
     const user = connectedUsers.find(user => user.index === index);
     if(!user) return;
     // server sends forced disconnect signal to user
-    server.send(`forcedisconnect`, user.port, user.address);
+    server.send(`${Packet.client.DISCONNECT}`, user.port, user.address);
     connectedUsers.splice(connectedUsers.indexOf(user), 1);
 };
 
