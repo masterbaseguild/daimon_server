@@ -86,6 +86,51 @@ const regionObjectToBuffer = (object: region) => {
     return buffer;
 };
 
+const regionBufferToObject = (buffer: Buffer) => {
+    const decompressedBuffer = zlib.inflateSync(new Uint8Array(buffer));
+    const headerBuffer = new Uint8Array(Buffer.alloc(256 * 6));
+    const dataBuffer = new Uint8Array(Buffer.alloc(decompressedBuffer.length - headerBuffer.length));
+    decompressedBuffer.copy(headerBuffer, 0, 0, headerBuffer.length);
+    decompressedBuffer.copy(dataBuffer, 0, headerBuffer.length, dataBuffer.length);
+    const header: string[] = [];
+    for (let i = 0; i < 256; i++) {
+        var headerLine = Array.from(headerBuffer.slice(i * 6, i * 6 + 6))
+            .map(byte => byte.toString(16).padStart(2, '0'))
+            .join('');
+        headerLine = headerLine.replace(/-/g, ``);
+        headerLine = headerLine.toLowerCase();
+        if (headerLine == "000000000000" && i != 0)
+        {
+            continue;
+        }
+        header.push(headerLine);
+    }
+    const data: number[][][][][][] = [];
+    for (let i = 0; i < 16; i++) {
+        data.push([]);
+        for (let j = 0; j < 16; j++) {
+            data[i].push([]);
+            for (let k = 0; k < 16; k++) {
+                data[i][j].push([]);
+                for (let l = 0; l < 16; l++) {
+                    data[i][j][k].push([]);
+                    for (let m = 0; m < 16; m++) {
+                        data[i][j][k][l].push([]);
+                        for (let n = 0; n < 16; n++) {
+                            data[i][j][k][l][m].push(dataBuffer[i * 16 * 16 * 16 * 16 * 16 + j * 16 * 16 * 16 * 16 + k * 16 * 16 * 16 + l * 16 * 16 + m * 16 + n]);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    const region: region = {
+        header: header,
+        data: data
+    };
+    return region;
+};
+
 const SetBlock = (x: number, y: number, z: number, blockIndex: number, region: region) => {
     const regionX = Math.floor(x / 16);
     const regionY = Math.floor(y / 16);
@@ -140,9 +185,20 @@ const generateSampleRegion = () => {
     return region;
 };
 
+// generate json region
 //const region = generateSampleRegion();
+
+// save to json
 //fs.writeFileSync(`region.json`, JSON.stringify(region));
-const region = JSON.parse(fs.readFileSync(`region.json`, `utf8`));
+
+// load from json
+//const region = JSON.parse(fs.readFileSync(`region.json`, `utf8`));
+
+// save to dat
+//fs.writeFileSync(`region.dat`, new Uint8Array(regionObjectToBuffer(region)));
+
+// load from dat
+const region = regionBufferToObject(fs.readFileSync(`region.dat`));
 
 // udp server
 
@@ -331,7 +387,7 @@ const printNonEmptyChunks = (region: region) => {
     }
 }
 
-if(false){
+if(true){
     const rl = readline.createInterface({
         input: process.stdin,
         output: process.stdout,
@@ -362,6 +418,10 @@ if(false){
         else if(args[0] === `region`){
             log(`info about region:`);
             console.log(region);
+        }
+        else if(args[0] === `header`){
+            log(`info about header:`);
+            console.log(region.header);
         }
         else if(args[0] === `nonair`){
             log(`non air blocks:`);
