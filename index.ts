@@ -319,7 +319,7 @@ server.on(`listening`, () =>{
 
 // loop
 
-const tickLength = 50; // ms
+const tickLength = 20; // ms
 
 const loop = () => {
     connectedUsers.forEach(user => {
