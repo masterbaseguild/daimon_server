@@ -218,6 +218,17 @@ const packetBufferToObject = (buffer: Buffer) => {
     return packet;
 };
 
+const findLowestAvailableIndex = () => {
+    var sortedConnectedUsers = connectedUsers;
+    sortedConnectedUsers.sort((a, b) => a.index - b.index);
+    for (let i = 1; i < sortedConnectedUsers.length; i++) {
+        if (sortedConnectedUsers[i].index - sortedConnectedUsers[i - 1].index > 1) {
+            return sortedConnectedUsers[i - 1].index + 1;
+        }
+    }
+    return sortedConnectedUsers.length;
+};
+
 server.bind(port);
 
 server.on(`error`, (err) => {
@@ -240,7 +251,7 @@ server.on(`message`, (buffer, rinfo) => {
         {
             log(`connected!`);
             const user: user = {
-                index: connectedUsers.length,
+                index: findLowestAvailableIndex(),
                 address: rinfo.address,
                 port: rinfo.port,
                 username: packet.data[0],
