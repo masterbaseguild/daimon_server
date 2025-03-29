@@ -109,7 +109,6 @@ const regionObjectToBuffer = (object: region) => {
 
     const buffer = zlib.deflateSync(combinedArray);
 
-    log(`region compressed to ${buffer.length} bytes`);
     return buffer;
 };
 
@@ -257,27 +256,29 @@ const port = 7689;
 const connectedUsers: user[] = [];
 const server = dgram.createSocket(`udp4`);
 const tcpServer = net.createServer((socket: net.Socket) => {
-    console.log('New TCP connection:', socket.remoteAddress, socket.remotePort);
     socket.on('data', (buffer) => {
-        console.log('Received from client:', buffer.toString());
         const packet: packet = packetBufferToObject(buffer);
         if(packet.type === Packet.server.CONNECT){
             const user = connectedUsers.find(user => user.index === packet.index);
             if(!user) return;
+            log(`${user.username} connected via TCP!`);
             user.socket = socket;
-            console.log(`User ${user.username} connected via TCP`);
-            socket.write(`${69}`);
+            socket.write(`${Packet.client.CONNECT}`);
+        }
+        // user requests a region
+        else if(packet.type === Packet.server.WORLD){
+            log(`${connectedUsers.find(user => user.socket === socket)?.username} requested world data`);
+            // server sends region to user
+            socket.write(`${Packet.client.WORLD}\t${regionObjectToBuffer(region).toString(`base64`)}`);
         }
     });
     socket.on('error', (err) => {
-        console.error('Socket error:', err);
+        error(`TCP server error: ${err}`);
     });
     socket.on('end', () => {
-        console.log('Client disconnected via TCP');
         socket.destroy();
     });
     socket.on('close', () => {
-        console.log('Socket closed');
     });
 });
 
@@ -305,10 +306,12 @@ const findLowestAvailableIndex = () => {
 };
 
 server.bind(port);
-tcpServer.listen(port);
+tcpServer.listen(port, () => {
+    log(`TCP server startup successful`);
+});
 
 server.on(`error`, (err) => {
-    error(`server error: ${err}`);
+    error(`UDP server error: ${err}`);
     server.close();
 });
 
@@ -316,16 +319,16 @@ server.on(`message`, (buffer, rinfo) => {
     const packet: packet = packetBufferToObject(buffer);
     // user connects
     if(packet.type === Packet.server.CONNECT){
-        log(`${packet.data[0]} attempting to connect with client port ${rinfo.port}...`);
+        log(`${packet.data[0]} attempting to connect via UDP with client port ${rinfo.port}...`);
         const isAlreadyConnected = connectedUsers.find(user => user.username === packet.data[0]);
         if(isAlreadyConnected){
-            log(`user already connected!`);
+            log(`${packet.data[0]} is already connected!`);
             // server sends conflict error
             server.send(`${Packet.client.DISCONNECT}`, rinfo.port, rinfo.address);
         }
         else
         {
-            log(`connected!`);
+            log(`${packet.data[0]} connected via UDP!`);
             const user: user = {
                 index: findLowestAvailableIndex(),
                 address: rinfo.address,
@@ -363,7 +366,7 @@ server.on(`message`, (buffer, rinfo) => {
     else if(packet.type === Packet.server.DISCONNECT){
         const user = connectedUsers.find(user => user.index === packet.index);
         if(!user) return;
-        log(`${user.username} has disconnected`);
+        log(`${user.username} has disconnected via UDP`);
         connectedUsers.splice(connectedUsers.indexOf(user), 1);
         connectedUsers.forEach(otherUser => {
             // server sends disconnected user signal to all connected users
@@ -393,16 +396,10 @@ server.on(`message`, (buffer, rinfo) => {
             server.send(`${Packet.client.CHAT}\t${user.index}\t${user.username}\t${packet.data[0]}`, otherUser.port, otherUser.address);
         });
     }
-    // user requests a region
-    else if(packet.type === Packet.server.WORLD){
-        log(`region request received`);
-        // server sends region to user
-        server.send(`${Packet.client.WORLD}\t${regionObjectToBuffer(region).toString(`base64`)}`, rinfo.port, rinfo.address);
-    }
 });
 
 server.on(`listening`, () =>{
-    log(`server startup successful`);
+    log(`UDP server startup successful`);
 });
 
 // loop
