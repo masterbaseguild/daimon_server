@@ -485,7 +485,7 @@ const printNonEmptyChunks = (region: region) => {
     }
 }
 
-if(true){
+if(false){
     const rl = readline.createInterface({
         input: process.stdin,
         output: process.stdout,
@@ -517,6 +517,11 @@ if(true){
         else if(args[0] === `header`){
             log(`info about header:`);
             console.log(region.header);
+        }
+        else if(args[0] === `headeradd`){
+            const blockId = args[1];
+            region.header.push(blockId);
+            log(`added block id ${blockId} to header`);
         }
         else if(args[0] === `nonair`){
             log(`non air blocks:`);
