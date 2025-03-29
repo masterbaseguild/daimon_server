@@ -8,8 +8,6 @@ import fs from 'fs';
 
 // data types
 
-const UDP_MAX_PACKET_SIZE = 512; // bytes
-
 declare global {
     interface user {
         index: number,
@@ -44,6 +42,8 @@ declare global {
     }
 }
 
+const currentMode = "edit"; // edit or play
+
 const Packet = {
     client:
     {
@@ -53,8 +53,9 @@ const Packet = {
         NEWPOSITION: 3,
         KEEPALIVE: 4,
         CHAT: 5,
-        USERCONNECT: 6,
-        USERDISCONNECT: 7
+        SETBLOCK: 6,
+        USERCONNECT: 7,
+        USERDISCONNECT: 8
     },
     server:
     {
@@ -63,7 +64,8 @@ const Packet = {
         WORLD: 2,
         NEWPOSITION: 3,
         KEEPALIVE: 4,
-        CHAT: 5
+        CHAT: 5,
+        SETBLOCK: 6
     }
 }
 
@@ -270,6 +272,18 @@ const tcpServer = net.createServer((socket: net.Socket) => {
             log(`${connectedUsers.find(user => user.socket === socket)?.username} requested world data`);
             // server sends region to user
             socket.write(`${Packet.client.WORLD}\t${regionObjectToBuffer(region).toString(`base64`)}`);
+        }
+        // user sets a block
+        else if(packet.type === Packet.server.SETBLOCK && currentMode === "edit"){
+            console.log(packet);
+            const user = connectedUsers.find(user => user.socket === socket);
+            if(!user) return;
+            log(`${user.username} set block at coordinates x:${packet.data[0]} y:${packet.data[1]} z:${packet.data[2]}`);
+            SetBlock(parseInt(packet.data[0]), parseInt(packet.data[1]), parseInt(packet.data[2]), parseInt(packet.data[3]), region);
+            // server sends block set to all connected users
+            connectedUsers.forEach(otherUser => {
+                otherUser?.socket?.write(`${Packet.client.SETBLOCK}\t${packet.data[0]}\t${packet.data[1]}\t${packet.data[2]}\t${packet.data[3]}`);
+            });
         }
     });
     socket.on('error', (err) => {
