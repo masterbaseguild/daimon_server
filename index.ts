@@ -275,7 +275,6 @@ const tcpServer = net.createServer((socket: net.Socket) => {
         }
         // user sets a block
         else if(packet.type === Packet.server.SETBLOCK && currentMode === "edit"){
-            console.log(packet);
             const user = connectedUsers.find(user => user.socket === socket);
             if(!user) return;
             log(`${user.username} set block at coordinates x:${packet.data[0]} y:${packet.data[1]} z:${packet.data[2]}`);
@@ -486,7 +485,7 @@ const printNonEmptyChunks = (region: region) => {
     }
 }
 
-if(false){
+if(true){
     const rl = readline.createInterface({
         input: process.stdin,
         output: process.stdout,
@@ -511,9 +510,6 @@ if(false){
             forceDisconnect(user.index);
             log(`${user.username} kicked`);
         }
-        else if(args[0] === `exit`){
-            rl.close();
-        }
         else if(args[0] === `region`){
             log(`info about region:`);
             console.log(region);
@@ -529,6 +525,10 @@ if(false){
         else if(args[0] === `nonempty`){
             log(`non empty chunks:`);
             printNonEmptyChunks(region);
+        }
+        else if(args[0] === `save`){
+            fs.writeFileSync(`world/0.0.0.dat`, new Uint8Array(regionObjectToBuffer(region)));
+            log(`region saved to world/0.0.0.dat`);
         }
         else if(args[0] === `clear`){
             console.clear();
