@@ -1,17 +1,21 @@
 // imports
 
 import dgram from 'dgram';
+import net from 'net';
 import readline from 'readline';
 import zlib from 'zlib';
 import fs from 'fs';
 
 // data types
 
+const UDP_MAX_PACKET_SIZE = 512; // bytes
+
 declare global {
     interface user {
         index: number,
         address: string,
         port: number,
+        socket: net.Socket | null,
         username: string,
         position: {
             x: number,
@@ -212,22 +216,70 @@ const generateSampleRegion = () => {
 //const region = generateSampleRegion();
 
 // save to json
-//fs.writeFileSync(`region.json`, JSON.stringify(region));
+//fs.writeFileSync(`world/0.0.0.json`, JSON.stringify(region));
 
 // load from json
-//const region = JSON.parse(fs.readFileSync(`region.json`, `utf8`));
+//const region = JSON.parse(fs.readFileSync(`world/0.0.0.json`, `utf8`));
 
 // save to dat
-//fs.writeFileSync(`region.dat`, new Uint8Array(regionObjectToBuffer(region)));
+//fs.writeFileSync(`world/0.0.0.dat`, new Uint8Array(regionObjectToBuffer(region)));
 
 // load from dat
-const region = regionBufferToObject(fs.readFileSync(`region.dat`));
+//const region = regionBufferToObject(fs.readFileSync(`world/0.0.0.dat`));
+
+// init world array
+const world: {region: region, coordinates: {x: number, y: number, z: number}}[] = [];
+var regionFiles = fs.readdirSync(`world`);
+regionFiles.forEach(file => {
+    if(file.endsWith(`.dat`)){
+        const data = fs.readFileSync(`world/${file}`)
+        const region = regionBufferToObject(data);
+        const coordinates = file.split(`.`);
+        const x = parseInt(coordinates[0]);
+        const y = parseInt(coordinates[1]);
+        const z = parseInt(coordinates[2]);
+        world.push({
+            region: region,
+            coordinates: {
+                x: x,
+                y: y,
+                z: z
+            }
+        });
+        log(`loaded region ${file} at coordinates x:${x} y:${y} z:${z}`);
+    }
+});
+const region = world[0].region;
 
 // udp server
 
 const port = 7689;
 const connectedUsers: user[] = [];
 const server = dgram.createSocket(`udp4`);
+const tcpServer = net.createServer((socket: net.Socket) => {
+    console.log('New TCP connection:', socket.remoteAddress, socket.remotePort);
+    socket.on('data', (buffer) => {
+        console.log('Received from client:', buffer.toString());
+        const packet: packet = packetBufferToObject(buffer);
+        if(packet.type === Packet.server.CONNECT){
+            const user = connectedUsers.find(user => user.index === packet.index);
+            if(!user) return;
+            user.socket = socket;
+            console.log(`User ${user.username} connected via TCP`);
+            socket.write(`${69}`);
+        }
+    });
+    socket.on('error', (err) => {
+        console.error('Socket error:', err);
+    });
+    socket.on('end', () => {
+        console.log('Client disconnected via TCP');
+        socket.destroy();
+    });
+    socket.on('close', () => {
+        console.log('Socket closed');
+    });
+});
 
 const packetBufferToObject = (buffer: Buffer) => {
     const elements: string[] = buffer.toString().split(`\t`);
@@ -253,6 +305,7 @@ const findLowestAvailableIndex = () => {
 };
 
 server.bind(port);
+tcpServer.listen(port);
 
 server.on(`error`, (err) => {
     error(`server error: ${err}`);
@@ -277,6 +330,7 @@ server.on(`message`, (buffer, rinfo) => {
                 index: findLowestAvailableIndex(),
                 address: rinfo.address,
                 port: rinfo.port,
+                socket: null,
                 username: packet.data[0],
                 position: {
                     x: 0,
