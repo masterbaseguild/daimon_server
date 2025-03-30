@@ -265,13 +265,34 @@ const tcpServer = net.createServer((socket: net.Socket) => {
             if(!user) return;
             log(`${user.username} connected via TCP!`);
             user.socket = socket;
-            socket.write(`${Packet.client.CONNECT}`);
+
+            const dataBuffer = `${0}`;
+
+            const typeBuffer = Buffer.alloc(2);
+            typeBuffer.writeInt16LE(Packet.client.CONNECT, 0);
+
+            const lengthBuffer = Buffer.alloc(4);
+            lengthBuffer.writeInt32LE(dataBuffer.length, 0);
+
+            socket.write(new Uint8Array(lengthBuffer));
+            socket.write(new Uint8Array(typeBuffer));
+            socket.write(dataBuffer);
         }
         // user requests a region
         else if(packet.type === Packet.server.WORLD){
             log(`${connectedUsers.find(user => user.socket === socket)?.username} requested world data`);
-            // server sends region to user
-            socket.write(`${Packet.client.WORLD}\t${regionObjectToBuffer(region).toString(`base64`)}`);
+
+            const dataBuffer = `${regionObjectToBuffer(region).toString(`base64`)}`;
+
+            const typeBuffer = Buffer.alloc(2);
+            typeBuffer.writeInt16LE(Packet.client.WORLD, 0);
+
+            const lengthBuffer = Buffer.alloc(4);
+            lengthBuffer.writeInt32LE(dataBuffer.length, 0);
+
+            socket.write(new Uint8Array(lengthBuffer));
+            socket.write(new Uint8Array(typeBuffer));
+            socket.write(dataBuffer);
         }
         // user sets a block
         else if(packet.type === Packet.server.SETBLOCK && currentMode === "edit"){
@@ -281,7 +302,17 @@ const tcpServer = net.createServer((socket: net.Socket) => {
             SetBlock(parseInt(packet.data[0]), parseInt(packet.data[1]), parseInt(packet.data[2]), parseInt(packet.data[3]), region);
             // server sends block set to all connected users
             connectedUsers.forEach(otherUser => {
-                otherUser?.socket?.write(`${Packet.client.SETBLOCK}\t${packet.data[0]}\t${packet.data[1]}\t${packet.data[2]}\t${packet.data[3]}`);
+                const dataBuffer = `${packet.data[0]}\t${packet.data[1]}\t${packet.data[2]}\t${packet.data[3]}`;
+
+                const typeBuffer = Buffer.alloc(2);
+                typeBuffer.writeInt16LE(Packet.client.SETBLOCK, 0);
+
+                const lengthBuffer = Buffer.alloc(4);
+                lengthBuffer.writeInt32LE(dataBuffer.length, 0);
+
+                otherUser.socket?.write(new Uint8Array(lengthBuffer));
+                otherUser.socket?.write(new Uint8Array(typeBuffer));
+                otherUser.socket?.write(dataBuffer);
             });
         }
     });
