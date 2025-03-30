@@ -453,7 +453,7 @@ const tickLength = 20; // ms
 const loop = () => {
     connectedUsers.forEach(user => {
         // server sends all positions to all connected users
-        server.send(`${Packet.client.NEWPOSITION}\t${connectedUsers.map(user => `${user.index}\t${user.position.x}\t${user.position.y}\t${user.position.z}\t${user.rotation.x}\t${user.rotation.y}\t${user.rotation.z}\t${user.camera.x}`.replace(/\./g, `,`)).join(`\t`)}`, user.port, user.address);
+        server.send(`${Packet.client.NEWPOSITION}\t${connectedUsers.map(user => `${user.index}\t${user.position.x}\t${user.position.y}\t${user.position.z}\t${user.rotation.x}\t${user.rotation.y}\t${user.rotation.z}\t${user.camera.x}`).join(`\t`)}`, user.port, user.address);
     });
 };
 
