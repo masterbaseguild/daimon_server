@@ -1,8 +1,8 @@
 {
   "scripts": {
-    "dev": "nodemon index.ts",
+    "dev": "INTERACTIVE=true nodemon src/index.ts",
     "build": "tsc",
-    "start": "node index.js"
+    "start": "node build/index.js"
   },
   "devDependencies": {
     "nodemon": "^3.0.1",

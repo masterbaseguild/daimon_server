@@ -1,10 +1,10 @@
 // imports
 
-import dgram from 'dgram';
-import net from 'net';
-import readline from 'readline';
-import zlib from 'zlib';
-import fs from 'fs';
+import * as dgram from 'dgram';
+import * as net from 'net';
+import * as readline from 'readline';
+import * as zlib from 'zlib';
+import * as fs from 'fs';
 
 // data types
 
@@ -516,7 +516,7 @@ const printNonEmptyChunks = (region: region) => {
     }
 }
 
-if(false){
+if(process.env.INTERACTIVE){
     const rl = readline.createInterface({
         input: process.stdin,
         output: process.stdout,
