@@ -317,12 +317,19 @@ const tcpServer = net.createServer((socket: net.Socket) => {
         }
     });
     socket.on('error', (err) => {
-        error(`TCP server error: ${err}`);
+        const user = connectedUsers.find(user => user.socket === socket);
+        console.log(`TCP connection error for ${user?.username}: ${err}`);
+        socket.destroy();
     });
     socket.on('end', () => {
+        const user = connectedUsers.find(user => user.socket === socket);
+        console.log(`TCP connection end for ${user?.username}`);
         socket.destroy();
     });
     socket.on('close', () => {
+        const user = connectedUsers.find(user => user.socket === socket);
+        console.log(`TCP connection close for ${user?.username}`);
+        socket.destroy();
     });
 });
 
@@ -468,6 +475,7 @@ const forceDisconnect = (index: number) => {
     if(!user) return;
     // server sends forced disconnect signal to user
     server.send(`${Packet.client.DISCONNECT}`, user.port, user.address);
+    user.socket?.destroy();
     connectedUsers.splice(connectedUsers.indexOf(user), 1);
 };
 
