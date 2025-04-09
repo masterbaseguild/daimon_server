@@ -59,8 +59,9 @@ const Packet = {
         KEEPALIVE: 4,
         CHAT: 5,
         SETBLOCK: 6,
-        USERCONNECT: 7,
-        USERDISCONNECT: 8
+        SCRIPT: 7,
+        USERCONNECT: 8,
+        USERDISCONNECT: 9
     },
     server:
     {
@@ -70,7 +71,8 @@ const Packet = {
         NEWPOSITION: 3,
         KEEPALIVE: 4,
         CHAT: 5,
-        SETBLOCK: 6
+        SETBLOCK: 6,
+        SCRIPT: 7
     }
 }
 
@@ -456,11 +458,23 @@ server.on(`message`, (buffer, rinfo) => {
         if(!user) return;
         user.lastkeepalivetimestamp = Date.now();
     }
+    else if(packet.type === Packet.server.SCRIPT){
+        const user = connectedUsers.find(user => user.index === packet.index);
+        if(!user) return;
+        log(`${user.username} sent a script channel message: ${packet.data[0]}`);
+        // WIP: process the content of the script channel message via lua interpreter
+    }
 });
 
 server.on(`listening`, () =>{
     log(`UDP server startup successful`);
 });
+
+const sendScriptMessage = (userIndex: number, message: string) => {
+    const user = connectedUsers.find(user => user.index === userIndex);
+    if(!user) return;
+    server.send(`${Packet.client.SCRIPT}\t${user.index}`, user.port, user.address);
+}
 
 // loop
 
