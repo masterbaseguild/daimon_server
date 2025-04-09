@@ -29,7 +29,9 @@ declare global {
             x: number,
             y: number,
             z: number
-        }
+        },
+        lastkeepalivetimestamp: number,
+        hasChangedPosition: boolean
     }
     interface packet {
         type: number,
@@ -317,18 +319,13 @@ const tcpServer = net.createServer((socket: net.Socket) => {
         }
     });
     socket.on('error', (err) => {
-        const user = connectedUsers.find(user => user.socket === socket);
-        console.log(`TCP connection error for ${user?.username}: ${err}`);
+        console.log(err);
         socket.destroy();
     });
     socket.on('end', () => {
-        const user = connectedUsers.find(user => user.socket === socket);
-        console.log(`TCP connection end for ${user?.username}`);
         socket.destroy();
     });
     socket.on('close', () => {
-        const user = connectedUsers.find(user => user.socket === socket);
-        console.log(`TCP connection close for ${user?.username}`);
         socket.destroy();
     });
 });
@@ -400,7 +397,9 @@ server.on(`message`, (buffer, rinfo) => {
                     x: 0,
                     y: 0,
                     z: 0
-                }
+                },
+                lastkeepalivetimestamp: Date.now(),
+                hasChangedPosition: false
             };
             connectedUsers.push(user);
             // server confirms connection
@@ -437,6 +436,7 @@ server.on(`message`, (buffer, rinfo) => {
         user.rotation.y = parseFloat(packet.data[4].replace(/,/g, `.`));
         user.rotation.z = parseFloat(packet.data[5].replace(/,/g, `.`));
         user.camera.x = parseFloat(packet.data[6].replace(/,/g, `.`));
+        user.hasChangedPosition = true;
     }
     // user sends a chat message
     else if(packet.type === Packet.server.CHAT){
@@ -446,6 +446,12 @@ server.on(`message`, (buffer, rinfo) => {
             // server sends chat message to all connected users
             server.send(`${Packet.client.CHAT}\t${user.index}\t${user.username}\t${packet.data[0]}`, otherUser.port, otherUser.address);
         });
+    }
+    // user sends a keepalive
+    else if(packet.type === Packet.server.KEEPALIVE){
+        const user = connectedUsers.find(user => user.index === packet.index);
+        if(!user) return;
+        user.lastkeepalivetimestamp = Date.now();
     }
 });
 
@@ -460,13 +466,54 @@ const tickLength = 20; // ms
 const loop = () => {
     connectedUsers.forEach(user => {
         // server sends all positions to all connected users
-        server.send(`${Packet.client.NEWPOSITION}\t${connectedUsers.map(user => `${user.index}\t${user.position.x}\t${user.position.y}\t${user.position.z}\t${user.rotation.x}\t${user.rotation.y}\t${user.rotation.z}\t${user.camera.x}`).join(`\t`)}`, user.port, user.address);
+        const packet = `${Packet.client.NEWPOSITION}${connectedUsers.map((user) => {
+            if(user.hasChangedPosition) {
+                user.hasChangedPosition = false;
+                return `\t${user.index}\t${user.position.x}\t${user.position.y}\t${user.position.z}\t${user.rotation.x}\t${user.rotation.y}\t${user.rotation.z}\t${user.camera.x}`
+            }
+            else {
+                return ""
+            }
+        })}`;
+        if(packet.length > 1) {
+            console.log(packet);
+            server.send(packet, user.port, user.address);
+        }
+    });
+};
+
+const keepalivegraceperiod = 30000; // ms
+const keepalivetickrate = 6000; // ms
+
+const sendKeepAlive = () => {
+    connectedUsers.forEach(user => {
+        if(user.lastkeepalivetimestamp + keepalivegraceperiod < Date.now())
+        {
+            log(`${user.username} has timed out`);
+            server.send(`${Packet.client.DISCONNECT}`, user.port, user.address);
+            user.socket?.destroy();
+            connectedUsers.splice(connectedUsers.indexOf(user), 1);
+            connectedUsers.forEach(otherUser => {
+                // server sends disconnected user signal to all connected users
+                server.send(`${Packet.client.USERDISCONNECT}\t${user.index}`, otherUser.port, otherUser.address);
+                // server sends chat message to all connected users
+                server.send(`${Packet.client.CHAT}\t${user.index}\t${user.username}\t${user.username} has disconnected`, otherUser.port, otherUser.address);
+            });
+        }
+        else
+        {
+            server.send(`${Packet.client.KEEPALIVE}`, user.port, user.address);
+        }
     });
 };
 
 setInterval(() => {
     loop();
 }, tickLength);
+
+setInterval(() => {
+    sendKeepAlive();
+}, keepalivetickrate);
 
 // command line interface
 
@@ -477,6 +524,12 @@ const forceDisconnect = (index: number) => {
     server.send(`${Packet.client.DISCONNECT}`, user.port, user.address);
     user.socket?.destroy();
     connectedUsers.splice(connectedUsers.indexOf(user), 1);
+    connectedUsers.forEach(otherUser => {
+        // server sends disconnected user signal to all connected users
+        server.send(`${Packet.client.USERDISCONNECT}\t${user.index}`, otherUser.port, otherUser.address);
+        // server sends chat message to all connected users
+        server.send(`${Packet.client.CHAT}\t${user.index}\t${user.username}\t${user.username} has disconnected`, otherUser.port, otherUser.address);
+    });
 };
 
 const printNonAirBlocks = (region: region) => {
