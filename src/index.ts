@@ -5,6 +5,9 @@ import * as net from 'net';
 import * as readline from 'readline';
 import * as zlib from 'zlib';
 import * as fs from 'fs';
+import * as dotenv from 'dotenv';
+
+dotenv.config({path: `./.env`});
 
 // data types
 
@@ -476,7 +479,6 @@ const loop = () => {
             }
         })}`;
         if(packet.length > 1) {
-            console.log(packet);
             server.send(packet, user.port, user.address);
         }
     });
