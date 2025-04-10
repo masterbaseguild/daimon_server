@@ -631,6 +631,14 @@ if(process.env.INTERACTIVE){
             region.header.push(blockId);
             log(`added block id ${blockId} to header`);
         }
+        else if(args[0] === `script`){
+            const prefix = args[1];
+            const message = args[2];
+            connectedUsers.forEach(user => {
+                server.send(`${Packet.client.SCRIPT}\t${prefix}\t${message}`, user.port, user.address);
+            });
+            log(`script message sent to all users`);
+        }
         else if(args[0] === `nonair`){
             log(`non air blocks:`);
             printNonAirBlocks(region);
