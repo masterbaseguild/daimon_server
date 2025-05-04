@@ -166,14 +166,29 @@ const regionBufferToObject = (buffer: Buffer) => {
     return region;
 };
 
-const SetBlock = (x: number, y: number, z: number, blockIndex: number, region: region) => {
-    const regionX = Math.floor(x / 16);
-    const regionY = Math.floor(y / 16);
-    const regionZ = Math.floor(z / 16);
-    const chunkX = x % 16;
-    const chunkY = y % 16;
-    const chunkZ = z % 16;
-    region.data[regionX][regionY][regionZ][chunkX][chunkY][chunkZ] = blockIndex;
+const SetBlock = (x: number, y: number, z: number, blockIndex: number) => {
+    const chunkX = Math.floor(x / 16);
+    const chunkY = Math.floor(y / 16);
+    const chunkZ = Math.floor(z / 16);
+    const regionX = Math.floor(chunkX / 16);
+    const regionY = Math.floor(chunkY / 16);
+    const regionZ = Math.floor(chunkZ / 16);
+    const region = world.find(region => region.coordinates.x === regionX && region.coordinates.y === regionY && region.coordinates.z === regionZ)?.region;
+    console.log(`placing block: found region at coords x:${regionX} y:${regionY} z:${regionZ}`);
+
+    if(!region) {
+        console.error(`Block coordinates out of bounds! ${x}, ${y}, ${z}`);
+        return;
+    }
+
+    if(region.header[blockIndex] === undefined) {
+        console.error(`Block index out of bounds! ${blockIndex}`);
+        return;
+    }
+    const voxelX = x % 16;
+    const voxelY = y % 16;
+    const voxelZ = z % 16;
+    region.data[chunkX%16][chunkY%16][chunkZ%16][voxelX][voxelY][voxelZ] = blockIndex;
 }
 
 const generateSampleRegion = () => {
@@ -208,14 +223,14 @@ const generateSampleRegion = () => {
     }
 
     // set sample blocks
-    SetBlock(100, 100, 100, 1, region);
-    SetBlock(100, 100, 101, 2, region);
-    SetBlock(101, 100, 100, 1, region);
-    SetBlock(101, 100, 101, 2, region);
-    SetBlock(100, 101, 100, 2, region);
-    SetBlock(100, 101, 101, 1, region);
-    SetBlock(101, 101, 100, 2, region);
-    SetBlock(101, 101, 101, 1, region);
+    SetBlock(100, 100, 100, 1);
+    SetBlock(100, 100, 101, 2);
+    SetBlock(101, 100, 100, 1);
+    SetBlock(101, 100, 101, 2);
+    SetBlock(100, 101, 100, 2);
+    SetBlock(100, 101, 101, 1);
+    SetBlock(101, 101, 100, 2);
+    SetBlock(101, 101, 101, 1);
 
     return region;
 };
@@ -257,7 +272,6 @@ regionFiles.forEach(file => {
         log(`loaded region ${file} at coordinates x:${x} y:${y} z:${z}`);
     }
 });
-const region = world[0].region;
 
 // udp server
 
@@ -306,7 +320,7 @@ const tcpServer = net.createServer((socket: net.Socket) => {
             const user = connectedUsers.find(user => user.socket === socket);
             if(!user) return;
             log(`${user.username} set block at coordinates x:${packet.data[0]} y:${packet.data[1]} z:${packet.data[2]}`);
-            SetBlock(parseInt(packet.data[0]), parseInt(packet.data[1]), parseInt(packet.data[2]), parseInt(packet.data[3]), region);
+            SetBlock(parseInt(packet.data[0]), parseInt(packet.data[1]), parseInt(packet.data[2]), parseInt(packet.data[3]));
             // server sends block set to all connected users
             connectedUsers.forEach(otherUser => {
                 const dataBuffer = `${packet.data[0]}\t${packet.data[1]}\t${packet.data[2]}\t${packet.data[3]}`;
