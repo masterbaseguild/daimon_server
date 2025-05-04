@@ -289,7 +289,7 @@ const tcpServer = net.createServer((socket: net.Socket) => {
         else if(packet.type === Packet.server.WORLD){
             log(`${connectedUsers.find(user => user.socket === socket)?.username} requested world data`);
 
-            const dataBuffer = `${regionObjectToBuffer(region).toString(`base64`)}`;
+            const dataBuffer = `${world.map(region => `${region.coordinates.x}\t${region.coordinates.y}\t${region.coordinates.z}\t${regionObjectToBuffer(region.region).toString(`base64`)}`).join(`\t`)}`;
 
             const typeBuffer = Buffer.alloc(2);
             typeBuffer.writeInt16LE(Packet.client.WORLD, 0);
@@ -619,37 +619,36 @@ if(process.env.INTERACTIVE){
             log(`${user.username} kicked`);
         }
         else if(args[0] === `region`){
+            const regionIndex = parseInt(args[1]);
             log(`info about region:`);
-            console.log(region);
+            console.log(world[regionIndex]);
         }
         else if(args[0] === `header`){
+            const regionIndex = parseInt(args[1]);
             log(`info about header:`);
-            console.log(region.header);
+            console.log(world[regionIndex].region.header);
         }
         else if(args[0] === `headeradd`){
+            const regionIndex = parseInt(args[1]);
             const blockId = args[1];
-            region.header.push(blockId);
+            world[regionIndex].region.header.push(blockId);
             log(`added block id ${blockId} to header`);
         }
-        else if(args[0] === `script`){
-            const prefix = args[1];
-            const message = args[2];
-            connectedUsers.forEach(user => {
-                server.send(`${Packet.client.SCRIPT}\t${prefix}\t${message}`, user.port, user.address);
-            });
-            log(`script message sent to all users`);
-        }
         else if(args[0] === `nonair`){
+            const regionIndex = parseInt(args[1]);
             log(`non air blocks:`);
-            printNonAirBlocks(region);
+            printNonAirBlocks(world[regionIndex].region);
         }
         else if(args[0] === `nonempty`){
+            const regionIndex = parseInt(args[1]);
             log(`non empty chunks:`);
-            printNonEmptyChunks(region);
+            printNonEmptyChunks(world[regionIndex].region);
         }
         else if(args[0] === `save`){
-            fs.writeFileSync(`world/0.0.0.dat`, new Uint8Array(regionObjectToBuffer(region)));
-            log(`region saved to world/0.0.0.dat`);
+            world.forEach((region, index) => {
+                fs.writeFileSync(`world/${region.coordinates.x}.${region.coordinates.y}.${region.coordinates.z}.dat`, new Uint8Array(regionObjectToBuffer(region.region)));
+                log(`saved region ${region.coordinates.x}.${region.coordinates.y}.${region.coordinates.z}.dat`);
+            });
         }
         else if(args[0] === `clear`){
             console.clear();
