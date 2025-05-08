@@ -89,19 +89,35 @@ const error = (message: string) => {
 // region
 
 const regionObjectToBuffer = (object: region) => {
-    const headerBuffer = Buffer.alloc(256 * 6);
-    for (let i = 0; i < 256; i++) {
-        if (object.header[i] === undefined) headerBuffer.write(`000000000000`, i * 6, 6, `hex`);
-        else headerBuffer.write(object.header[i], i * 6, 6, `hex`);
+    const headerSize = object.header.length;
+    const headerLengthBuffer = Buffer.alloc(4);
+    headerLengthBuffer.writeInt32LE(headerSize, 0);
+
+    let byteWidth: 1 | 2 | 4;
+    if (headerSize <= 0xFF) byteWidth = 1;
+    else if (headerSize <= 0xFFFF) byteWidth = 2;
+    else byteWidth = 4;
+
+    const headerBuffer = Buffer.alloc(6 * headerSize);
+    for (let i = 0; i < headerSize; i++) {
+        headerBuffer.write(object.header[i] ?? '000000000000', i * 6, 6, 'hex');
     }
-    const dataBuffer = Buffer.alloc(16 * 16 * 16 * 16 * 16 * 16);
+
+    const totalBlocks = 16 ** 6;
+    const dataBuffer = Buffer.alloc(totalBlocks * byteWidth);
+
+    let offset = 0;
     for (let i = 0; i < 16; i++) {
         for (let j = 0; j < 16; j++) {
             for (let k = 0; k < 16; k++) {
                 for (let l = 0; l < 16; l++) {
                     for (let m = 0; m < 16; m++) {
                         for (let n = 0; n < 16; n++) {
-                            dataBuffer.writeUInt8(object.data[i][j][k][l][m][n], i * 16 * 16 * 16 * 16 * 16 + j * 16 * 16 * 16 * 16 + k * 16 * 16 * 16 + l * 16 * 16 + m * 16 + n);
+                            const value = object.data[i][j][k][l][m][n];
+                            if (byteWidth === 1) dataBuffer.writeUInt8(value, offset);
+                            else if (byteWidth === 2) dataBuffer.writeUInt16LE(value, offset);
+                            else dataBuffer.writeUInt32LE(value, offset);
+                            offset += byteWidth;
                         }
                     }
                 }
@@ -109,38 +125,38 @@ const regionObjectToBuffer = (object: region) => {
         }
     }
 
-    const headerUint8Array = new Uint8Array(headerBuffer.buffer);
-    const dataUint8Array = new Uint8Array(dataBuffer.buffer);
+    const fullBuffer = Buffer.concat([headerLengthBuffer, headerBuffer, dataBuffer]);
+    const compressed = zlib.deflateSync(fullBuffer);
 
-    const combinedArray = new Uint8Array(headerUint8Array.length + dataUint8Array.length);
-    combinedArray.set(headerUint8Array);
-    combinedArray.set(dataUint8Array, headerUint8Array.length);
-
-    const buffer = zlib.deflateSync(combinedArray);
-
-    return buffer;
+    return compressed;
 };
 
 const regionBufferToObject = (buffer: Buffer) => {
     const decompressedBuffer = zlib.inflateSync(new Uint8Array(buffer));
-    const headerBuffer = new Uint8Array(Buffer.alloc(256 * 6));
-    const dataBuffer = new Uint8Array(Buffer.alloc(decompressedBuffer.length - headerBuffer.length));
-    decompressedBuffer.copy(headerBuffer, 0, 0, headerBuffer.length);
-    decompressedBuffer.copy(dataBuffer, 0, headerBuffer.length, dataBuffer.length);
+
+    const headerSize = decompressedBuffer.readInt32LE(0);
+
+    let byteWidth: 1 | 2 | 4;
+    if (headerSize <= 0xFF) byteWidth = 1;
+    else if (headerSize <= 0xFFFF) byteWidth = 2;
+    else byteWidth = 4;
+
     const header: string[] = [];
-    for (let i = 0; i < 256; i++) {
-        var headerLine = Array.from(headerBuffer.slice(i * 6, i * 6 + 6))
-            .map(byte => byte.toString(16).padStart(2, '0'))
-            .join('');
-        headerLine = headerLine.replace(/-/g, ``);
-        headerLine = headerLine.toLowerCase();
-        if (headerLine == "000000000000" && i != 0)
-        {
-            continue;
-        }
-        header.push(headerLine);
+    const headerStart = 4;
+    const headerEnd = headerStart + headerSize * 6;
+
+    for (let i = 0; i < headerSize; i++) {
+        const slice = decompressedBuffer.subarray(headerStart + i * 6, headerStart + (i + 1) * 6);
+        let hex = [...slice].map(b => b.toString(16).padStart(2, '0')).join('').toLowerCase();
+        if (hex === "000000000000" && i !== 0) continue;
+        header.push(hex);
     }
+
+    const dataStart = headerEnd;
     const data: number[][][][][][] = [];
+
+    let offset = dataStart;
+
     for (let i = 0; i < 16; i++) {
         data.push([]);
         for (let j = 0; j < 16; j++) {
@@ -152,7 +168,16 @@ const regionBufferToObject = (buffer: Buffer) => {
                     for (let m = 0; m < 16; m++) {
                         data[i][j][k][l].push([]);
                         for (let n = 0; n < 16; n++) {
-                            data[i][j][k][l][m].push(dataBuffer[i * 16 * 16 * 16 * 16 * 16 + j * 16 * 16 * 16 * 16 + k * 16 * 16 * 16 + l * 16 * 16 + m * 16 + n]);
+                            let value: number;
+                            if (byteWidth === 1) {
+                                value = decompressedBuffer.readUInt8(offset);
+                            } else if (byteWidth === 2) {
+                                value = decompressedBuffer.readUInt16LE(offset);
+                            } else {
+                                value = decompressedBuffer.readUInt32LE(offset);
+                            }
+                            data[i][j][k][l][m].push(value);
+                            offset += byteWidth;
                         }
                     }
                 }
