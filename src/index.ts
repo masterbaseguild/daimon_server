@@ -206,14 +206,24 @@ const SetBlock = (x: number, y: number, z: number, blockIndex: number) => {
         return;
     }
 
-    if(region.header[blockIndex] === undefined) {
+    const blockId = data.blocks[blockIndex];
+    if(blockId === undefined) {
         console.error(`Block index out of bounds! ${blockIndex}`);
         return;
     }
+
+    // find blockId in region header
+    var blockIdIndex = region.header.findIndex(id => id === blockId);
+    if(blockIdIndex === -1) {
+        // add blockId to region header
+        blockIdIndex = region.header.length;
+        region.header.push(blockId);
+    }
+
     const voxelX = x % 16;
     const voxelY = y % 16;
     const voxelZ = z % 16;
-    region.data[chunkX%16][chunkY%16][chunkZ%16][voxelX][voxelY][voxelZ] = blockIndex;
+    region.data[chunkX%16][chunkY%16][chunkZ%16][voxelX][voxelY][voxelZ] = blockIdIndex;
 }
 
 const generateSampleRegion = () => {
@@ -297,6 +307,7 @@ regionFiles.forEach(file => {
         log(`loaded region ${file} at coordinates x:${x} y:${y} z:${z}`);
     }
 });
+const data = JSON.parse(fs.readFileSync(`world/data.json`, `utf8`));
 
 // udp server
 
@@ -312,7 +323,16 @@ const tcpServer = net.createServer((socket: net.Socket) => {
             log(`${user.username} connected via TCP!`);
             user.socket = socket;
 
-            const dataBuffer = `${0}`;
+            var dataBuffer;
+            if(currentMode === "edit")
+            {
+                // set databuffer to the data.blocks array
+                dataBuffer = `${data.blocks.join(`\t`)}`;
+            }
+            else
+            {
+                dataBuffer = `${0}`;
+            }
 
             const typeBuffer = Buffer.alloc(2);
             typeBuffer.writeInt16LE(Packet.client.CONNECT, 0);
