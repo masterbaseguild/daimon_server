@@ -43,7 +43,8 @@ declare global {
     }
     interface region {
         header: string[],
-        data: number[][][][][][]
+        data: number[][][][][][],
+        miniData: number[][][][][][]
     }
 }
 
@@ -106,7 +107,8 @@ const regionObjectToBuffer = (object: region) => {
     }
 
     const totalBlocks = 16 ** 6;
-    const dataBuffer = Buffer.alloc(totalBlocks * byteWidth);
+    const totalMiniBlocks = 16 ** 6 * 8;
+    const dataBuffer = Buffer.alloc(totalBlocks * byteWidth + totalMiniBlocks * byteWidth);
 
     let offset = 0;
     for (let i = 0; i < 16; i++) {
@@ -116,6 +118,24 @@ const regionObjectToBuffer = (object: region) => {
                     for (let m = 0; m < 16; m++) {
                         for (let n = 0; n < 16; n++) {
                             const value = object.data[i][j][k][l][m][n];
+                            if (byteWidth === 1) dataBuffer.writeUInt8(value, offset);
+                            else if (byteWidth === 2) dataBuffer.writeUInt16LE(value, offset);
+                            else dataBuffer.writeUInt32LE(value, offset);
+                            offset += byteWidth;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    for (let i = 0; i < 16; i++) {
+        for (let j = 0; j < 16; j++) {
+            for (let k = 0; k < 16; k++) {
+                for (let l = 0; l < 32; l++) {
+                    for (let m = 0; m < 32; m++) {
+                        for (let n = 0; n < 32; n++) {
+                            const value = object.miniData[i][j][k][l][m][n];
                             if (byteWidth === 1) dataBuffer.writeUInt8(value, offset);
                             else if (byteWidth === 2) dataBuffer.writeUInt16LE(value, offset);
                             else dataBuffer.writeUInt32LE(value, offset);
@@ -186,9 +206,41 @@ const regionBufferToObject = (buffer: Buffer) => {
             }
         }
     }
+
+    const miniData: number[][][][][][] = [];
+
+    for (let i = 0; i < 16; i++) {
+        miniData.push([]);
+        for (let j = 0; j < 16; j++) {
+            miniData[i].push([]);
+            for (let k = 0; k < 16; k++) {
+                miniData[i][j].push([]);
+                for (let l = 0; l < 32; l++) {
+                    miniData[i][j][k].push([]);
+                    for (let m = 0; m < 32; m++) {
+                        miniData[i][j][k][l].push([]);
+                        for (let n = 0; n < 32; n++) {
+                            let value: number;
+                            if (byteWidth === 1) {
+                                value = decompressedBuffer.readUInt8(offset);
+                            } else if (byteWidth === 2) {
+                                value = decompressedBuffer.readUInt16LE(offset);
+                            } else {
+                                value = decompressedBuffer.readUInt32LE(offset);
+                            }
+                            miniData[i][j][k][l][m].push(value);
+                            offset += byteWidth;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     const region: region = {
         header: header,
-        data: data
+        data: data,
+        miniData: miniData
     };
     return region;
 };
@@ -201,7 +253,6 @@ const SetBlock = (x: number, y: number, z: number, blockIndex: number) => {
     const regionY = Math.floor(chunkY / 16);
     const regionZ = Math.floor(chunkZ / 16);
     const region = world.find(region => region.coordinates.x === regionX && region.coordinates.y === regionY && region.coordinates.z === regionZ)?.region;
-    console.log(`placing block: found region at coords x:${regionX} y:${regionY} z:${regionZ}`);
 
     if(!region) {
         console.error(`Block coordinates out of bounds! ${x}, ${y}, ${z}`);
@@ -228,10 +279,45 @@ const SetBlock = (x: number, y: number, z: number, blockIndex: number) => {
     region.data[chunkX%16][chunkY%16][chunkZ%16][voxelX][voxelY][voxelZ] = blockIdIndex;
 }
 
+const SetMiniBlock = (x: number, y: number, z: number, blockIndex: number) => {
+    const chunkX = Math.floor(x / 32);
+    const chunkY = Math.floor(y / 32);
+    const chunkZ = Math.floor(z / 32);
+    const regionX = Math.floor(chunkX / 16);
+    const regionY = Math.floor(chunkY / 16);
+    const regionZ = Math.floor(chunkZ / 16);
+    const region = world.find(region => region.coordinates.x === regionX && region.coordinates.y === regionY && region.coordinates.z === regionZ)?.region;
+
+    if(!region) {
+        console.error(`Block coordinates out of bounds! ${x}, ${y}, ${z}`);
+        return;
+    }
+
+    const blockId = data.blocks[blockIndex];
+    if(blockId === undefined) {
+        console.error(`Block index out of bounds! ${blockIndex}`);
+        return;
+    }
+
+    // find blockId in region header
+    var blockIdIndex = region.header.findIndex(id => id === blockId);
+    if(blockIdIndex === -1) {
+        // add blockId to region header
+        blockIdIndex = region.header.length;
+        region.header.push(blockId);
+    }
+
+    const voxelX = x % 32;
+    const voxelY = y % 32;
+    const voxelZ = z % 32;
+    region.miniData[chunkX%16][chunkY%16][chunkZ%16][voxelX][voxelY][voxelZ] = blockIdIndex;
+}
+
 const generateSampleRegion = () => {
     const region: region = {
         header: [],
-        data: []
+        data: [],
+        miniData: []
     };
 
     // set sample header
@@ -252,6 +338,26 @@ const generateSampleRegion = () => {
                         region.data[i][j][k][l].push([]); //chunk y
                         for (let n = 0; n < 16; n++) {
                             region.data[i][j][k][l][m].push(0); //chunk z
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // fill miniData with air
+    for (let i = 0; i < 16; i++) {
+        region.miniData.push([]); //region x
+        for (let j = 0; j < 16; j++) {
+            region.miniData[i].push([]); //region y
+            for (let k = 0; k < 16; k++) {
+                region.miniData[i][j].push([]); //region z
+                for (let l = 0; l < 32; l++) {
+                    region.miniData[i][j][k].push([]); //chunk x
+                    for (let m = 0; m < 32; m++) {
+                        region.miniData[i][j][k][l].push([]); //chunk y
+                        for (let n = 0; n < 32; n++) {
+                            region.miniData[i][j][k][l][m].push(0); //chunk z
                         }
                     }
                 }
@@ -388,6 +494,8 @@ const tcpServer = net.createServer((socket: net.Socket) => {
             const user = connectedUsers.find(user => user.socket === socket);
             if(!user) return;
             log(`${user.username} set mini block at coordinates x:${packet.data[0]} y:${packet.data[1]} z:${packet.data[2]}`);
+            SetMiniBlock(parseInt(packet.data[0]), parseInt(packet.data[1]), parseInt(packet.data[2]), parseInt(packet.data[3]));
+            // server sends block set to all connected users
             connectedUsers.forEach(otherUser => {
                 const dataBuffer = `${packet.data[0]}\t${packet.data[1]}\t${packet.data[2]}\t${packet.data[3]}`;
 
@@ -578,7 +686,7 @@ const loop = () => {
     });
 };
 
-const keepalivegraceperiod = 30000; // ms
+const keepalivegraceperiod = 300000; // ms
 const keepalivetickrate = 6000; // ms
 
 const sendKeepAlive = () => {
