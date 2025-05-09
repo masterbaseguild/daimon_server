@@ -59,9 +59,10 @@ const Packet = {
         KEEPALIVE: 4,
         CHAT: 5,
         SETBLOCK: 6,
-        SCRIPT: 7,
-        USERCONNECT: 8,
-        USERDISCONNECT: 9
+        SETMINIBLOCK: 7,
+        SCRIPT: 8,
+        USERCONNECT: 9,
+        USERDISCONNECT: 10
     },
     server:
     {
@@ -72,7 +73,8 @@ const Packet = {
         KEEPALIVE: 4,
         CHAT: 5,
         SETBLOCK: 6,
-        SCRIPT: 7
+        SETMINIBLOCK: 7,
+        SCRIPT: 8
     }
 }
 
@@ -372,6 +374,25 @@ const tcpServer = net.createServer((socket: net.Socket) => {
 
                 const typeBuffer = Buffer.alloc(2);
                 typeBuffer.writeInt16LE(Packet.client.SETBLOCK, 0);
+
+                const lengthBuffer = Buffer.alloc(4);
+                lengthBuffer.writeInt32LE(dataBuffer.length, 0);
+
+                otherUser.socket?.write(new Uint8Array(lengthBuffer));
+                otherUser.socket?.write(new Uint8Array(typeBuffer));
+                otherUser.socket?.write(dataBuffer);
+            });
+        }
+        // user sets a mini block
+        else if(packet.type === Packet.server.SETMINIBLOCK && currentMode === "edit"){
+            const user = connectedUsers.find(user => user.socket === socket);
+            if(!user) return;
+            log(`${user.username} set mini block at coordinates x:${packet.data[0]} y:${packet.data[1]} z:${packet.data[2]}`);
+            connectedUsers.forEach(otherUser => {
+                const dataBuffer = `${packet.data[0]}\t${packet.data[1]}\t${packet.data[2]}\t${packet.data[3]}`;
+
+                const typeBuffer = Buffer.alloc(2);
+                typeBuffer.writeInt16LE(Packet.client.SETMINIBLOCK, 0);
 
                 const lengthBuffer = Buffer.alloc(4);
                 lengthBuffer.writeInt32LE(dataBuffer.length, 0);
