@@ -435,7 +435,7 @@ const tcpServer = net.createServer((socket: net.Socket) => {
             if(currentMode === "edit")
             {
                 // set databuffer to the data.blocks array
-                dataBuffer = `${data.blocks.join(`\t`)}`;
+                dataBuffer = `${data.blocks.length}\t${data.blocks.join(`\t`)}\t${data.models.length}\t${data.models.join(`\t`)}`;
             }
             else
             {
