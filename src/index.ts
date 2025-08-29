@@ -252,12 +252,14 @@ const SetBlock = (x: number, y: number, z: number, blockIndex: number) => {
     const regionX = Math.floor(chunkX / 16);
     const regionY = Math.floor(chunkY / 16);
     const regionZ = Math.floor(chunkZ / 16);
-    const region = world.find(region => region.coordinates.x === regionX && region.coordinates.y === regionY && region.coordinates.z === regionZ)?.region;
+    const regionPointer = world.find(region => region.coordinates.x === regionX && region.coordinates.y === regionY && region.coordinates.z === regionZ);
 
-    if(!region) {
+    if(!regionPointer) {
         console.error(`Block coordinates out of bounds! ${x}, ${y}, ${z}`);
         return;
     }
+
+    const region = regionPointer.region;
 
     const blockId = data.blocks[blockIndex];
     if(blockId === undefined) {
@@ -277,6 +279,7 @@ const SetBlock = (x: number, y: number, z: number, blockIndex: number) => {
     const voxelY = y % 16;
     const voxelZ = z % 16;
     region.data[chunkX%16][chunkY%16][chunkZ%16][voxelX][voxelY][voxelZ] = blockIdIndex;
+    regionPointer.updated = true;
 }
 
 const SetMiniBlock = (x: number, y: number, z: number, blockIndex: number) => {
@@ -286,12 +289,14 @@ const SetMiniBlock = (x: number, y: number, z: number, blockIndex: number) => {
     const regionX = Math.floor(chunkX / 16);
     const regionY = Math.floor(chunkY / 16);
     const regionZ = Math.floor(chunkZ / 16);
-    const region = world.find(region => region.coordinates.x === regionX && region.coordinates.y === regionY && region.coordinates.z === regionZ)?.region;
+    const regionPointer = world.find(region => region.coordinates.x === regionX && region.coordinates.y === regionY && region.coordinates.z === regionZ);
 
-    if(!region) {
+    if(!regionPointer) {
         console.error(`Block coordinates out of bounds! ${x}, ${y}, ${z}`);
         return;
     }
+
+    const region = regionPointer.region;
 
     const blockId = data.blocks[blockIndex];
     if(blockId === undefined) {
@@ -311,6 +316,7 @@ const SetMiniBlock = (x: number, y: number, z: number, blockIndex: number) => {
     const voxelY = y % 32;
     const voxelZ = z % 32;
     region.miniData[chunkX%16][chunkY%16][chunkZ%16][voxelX][voxelY][voxelZ] = blockIdIndex;
+    regionPointer.updated = true;
 }
 
 const generateSampleRegion = () => {
@@ -394,7 +400,7 @@ const generateSampleRegion = () => {
 //const region = regionBufferToObject(fs.readFileSync(`world/0.0.0.dat`));
 
 // init world array
-const world: {region: region, coordinates: {x: number, y: number, z: number}}[] = [];
+const world: {region: region, coordinates: {x: number, y: number, z: number}, updated: boolean}[] = [];
 var regionFiles = fs.readdirSync(`world`);
 regionFiles.forEach(file => {
     if(file.endsWith(`.dat`)){
@@ -410,7 +416,8 @@ regionFiles.forEach(file => {
                 x: x,
                 y: y,
                 z: z
-            }
+            },
+            updated: false
         });
         log(`loaded region ${file} at coordinates x:${x} y:${y} z:${z}`);
     }
@@ -667,6 +674,8 @@ const sendScriptMessage = (userIndex: number, message: string) => {
 // loop
 
 const tickLength = 20; // ms
+const saveInterval = 60*1000; // 1 minute
+const backupInterval = 60*60*1000; // 1 hour
 
 const loop = () => {
     connectedUsers.forEach(user => {
@@ -718,6 +727,14 @@ setInterval(() => {
 setInterval(() => {
     sendKeepAlive();
 }, keepalivetickrate);
+
+setInterval(() => {
+    backupWorld();
+}, backupInterval);
+
+setInterval(() => {
+    save();
+}, saveInterval);
 
 // command line interface
 
@@ -781,6 +798,73 @@ const printNonEmptyChunks = (region: region) => {
     }
 }
 
+const save = () => {
+    world.forEach((region) => {
+        if(!region.updated) return;
+        fs.writeFile(`world/${region.coordinates.x}.${region.coordinates.y}.${region.coordinates.z}.dat.temp`, new Uint8Array(regionObjectToBuffer(region.region)), (err) => {
+            if (err) {
+                log(`error saving region ${region.coordinates.x}.${region.coordinates.y}.${region.coordinates.z}: ${err}`);
+            } else {
+                fs.rename(`world/${region.coordinates.x}.${region.coordinates.y}.${region.coordinates.z}.dat.temp`, `world/${region.coordinates.x}.${region.coordinates.y}.${region.coordinates.z}.dat`, (err) => {
+                    if (err) {
+                        log(`error saving region ${region.coordinates.x}.${region.coordinates.y}.${region.coordinates.z}: ${err}`);
+                    } else {
+                        log(`saved region ${region.coordinates.x}.${region.coordinates.y}.${region.coordinates.z}`);
+                        region.updated = false;
+                    }
+                });
+            }
+        });
+    });
+}
+
+const backupWorld = () => {
+    fs.readdir(`world`, (err, files) => {
+        if (err) {
+            log(`error creating backup: ${err}`);
+            return;
+        }
+        const backupDir = `backups/${Date.now()}`;
+        fs.mkdir(backupDir, { recursive: true }, (err) => {
+            if (err) {
+                log(`error creating backup: ${err}`);
+                return;
+            }
+            files.forEach(file => {
+                fs.copyFile(`world/${file}`, `${backupDir}/${file}`, (err) => {
+                    if (err) {
+                        log(`error creating backup: ${err}`);
+                    } else {
+                        log(`backed up ${file}`);
+                    }
+                });
+            });
+        });
+    });
+    // check if in the backups directory there are more than 7*24 backups and delete the oldest ones
+    fs.readdir(`backups`, (err, dirs) => {
+        if (err) {
+            log(`error reading backups directory: ${err}`);
+            return;
+        }
+        if (dirs.length > 7 * 24) {
+            dirs.sort((a, b) => {
+                return parseInt(a) - parseInt(b);
+            });
+            const toDelete = dirs.slice(0, dirs.length - 7 * 24);
+            toDelete.forEach(dir => {
+                fs.rmdir(`backups/${dir}`, { recursive: true }, (err) => {
+                    if (err) {
+                        log(`error deleting backup ${dir}: ${err}`);
+                    } else {
+                        log(`deleted backup ${dir}`);
+                    }
+                });
+            });
+        }
+    });
+};
+
 if(process.env.INTERACTIVE){
     const rl = readline.createInterface({
         input: process.stdin,
@@ -833,10 +917,7 @@ if(process.env.INTERACTIVE){
             printNonEmptyChunks(world[regionIndex].region);
         }
         else if(args[0] === `save`){
-            world.forEach((region, index) => {
-                fs.writeFileSync(`world/${region.coordinates.x}.${region.coordinates.y}.${region.coordinates.z}.dat`, new Uint8Array(regionObjectToBuffer(region.region)));
-                log(`saved region ${region.coordinates.x}.${region.coordinates.y}.${region.coordinates.z}.dat`);
-            });
+            save();
         }
         else if(args[0] === `clear`){
             console.clear();
