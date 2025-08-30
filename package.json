@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "dev": "nodemon src/index.ts",
+    "dev": "nodemon --ignore backups/ src/index.ts",
     "build": "tsc",
     "start": "node build/index.js"
   },
