@@ -724,9 +724,9 @@ setInterval(() => {
     loop();
 }, tickLength);
 
-setInterval(() => {
+/* setInterval(() => {
     sendKeepAlive();
-}, keepalivetickrate);
+}, keepalivetickrate); */
 
 setInterval(() => {
     backupWorld();
