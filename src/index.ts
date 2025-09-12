@@ -261,7 +261,7 @@ const SetBlock = (x: number, y: number, z: number, blockIndex: number) => {
 
     const region = regionPointer.region;
 
-    const blockId = data.blocks[blockIndex];
+    const blockId = blockPalette.blocks[blockIndex];
     if(blockId === undefined) {
         console.error(`Block index out of bounds! ${blockIndex}`);
         return;
@@ -298,7 +298,7 @@ const SetMiniBlock = (x: number, y: number, z: number, blockIndex: number) => {
 
     const region = regionPointer.region;
 
-    const blockId = data.blocks[blockIndex];
+    const blockId = blockPalette.blocks[blockIndex];
     if(blockId === undefined) {
         console.error(`Block index out of bounds! ${blockIndex}`);
         return;
@@ -401,6 +401,7 @@ const generateSampleRegion = () => {
 
 // init world array
 const world: {region: region, coordinates: {x: number, y: number, z: number}, updated: boolean}[] = [];
+const blockPalette = JSON.parse(fs.readFileSync(`world/data.json`, `utf8`));
 var regionFiles = fs.readdirSync(`world`);
 regionFiles.forEach(file => {
     if(file.endsWith(`.dat`)){
@@ -410,6 +411,7 @@ regionFiles.forEach(file => {
         const x = parseInt(coordinates[0]);
         const y = parseInt(coordinates[1]);
         const z = parseInt(coordinates[2]);
+        region.header = blockPalette.blocks;
         world.push({
             region: region,
             coordinates: {
@@ -422,7 +424,6 @@ regionFiles.forEach(file => {
         log(`loaded region ${file} at coordinates x:${x} y:${y} z:${z}`);
     }
 });
-const data = JSON.parse(fs.readFileSync(`world/data.json`, `utf8`));
 
 // udp server
 
@@ -442,7 +443,7 @@ const tcpServer = net.createServer((socket: net.Socket) => {
             if(currentMode === "edit")
             {
                 // set databuffer to the data.blocks array
-                dataBuffer = `${data.blocks.join(`\t`)}`;
+                dataBuffer = `${blockPalette.blocks.join(`\t`)}`;
             }
             else
             {
