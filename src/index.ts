@@ -680,17 +680,17 @@ const backupInterval = 60*60*1000; // 1 hour
 
 const loop = () => {
     connectedUsers.forEach(user => {
-        // server sends all positions to all connected users
-        const packet = `${Packet.client.NEWPOSITION}${connectedUsers.map((user) => {
-            if(user.hasChangedPosition) {
+        const updates = connectedUsers
+            .filter(user => user.hasChangedPosition)
+            .map(user => {
                 user.hasChangedPosition = false;
-                return `\t${user.index}\t${user.position.x}\t${user.position.y}\t${user.position.z}\t${user.rotation.x}\t${user.rotation.y}\t${user.rotation.z}\t${user.camera.x}`
-            }
-            else {
-                return ""
-            }
-        })}`;
-        if(packet.length > 1) {
+                return `\t${user.index}\t${user.position.x}\t${user.position.y}\t${user.position.z}\t${user.rotation.x}\t${user.rotation.y}\t${user.rotation.z}\t${user.camera.x}`;
+            })
+            .join("");
+
+        const packet = `${Packet.client.NEWPOSITION}${updates}`;
+
+        if (updates.length > 0) {
             server.send(packet, user.port, user.address);
         }
     });
